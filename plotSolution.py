@@ -18,13 +18,8 @@ def plot(path, obstacles):
     height = 6 * maxd / dy
     fig.set_size_inches((width, height))
 
-    #for i in range(len(obstacles)):
-        #ax.add_patch(patches.Polygon(obstacles[i], fill=True, color='0.20')
-    ax.add_patch(patches.Polygon(obstacles[0], fill=True, color='0.20'))
-    ax.add_patch(patches.Polygon(obstacles[1], fill=True, color='0.20'))
-    ax.add_patch(patches.Polygon(obstacles[2], fill=True, color='0.20'))
-    ax.add_patch(patches.Polygon(obstacles[3], fill=True, color='0.20'))
-    ax.add_patch(patches.Polygon(obstacles[4], fill=True, color='0.20'))
+    for i in range(len(obstacles)):
+        ax.add_patch(patches.Polygon(obstacles[i], fill=True, color='0.20'))
 
     # Plotting the path (reference point)
     X = [p[0] for p in path]
@@ -81,7 +76,6 @@ if __name__ == '__main__':
         filename = 'path.txt'
 
     obstacles, path = readPath(filename)
-    print path
     try:
         plot(path, obstacles)
     except IndexError:
