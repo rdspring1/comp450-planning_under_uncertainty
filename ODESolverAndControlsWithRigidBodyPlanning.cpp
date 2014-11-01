@@ -19,6 +19,7 @@
 
 // Planner
 #include <ompl/control/planners/rrt/RRT.h>
+#include <ompl/control/planners/kpiece/KPIECE1.h>
 
 //environment parsing
 const std::string startStr = "start";
@@ -107,6 +108,34 @@ bool lineIntersection(Point2D ours0, Point2D ours1, Point2D theirs0, Point2D the
     return false;
 }
 
+class CarProjection : public ob::ProjectionEvaluator
+{
+    public:
+        CarProjection(const ob::StateSpacePtr &space) : ob::ProjectionEvaluator(space) {}
+
+        virtual unsigned int getDimension(void) const
+        {
+            return 2;
+        }
+        virtual void defaultCellSizes(void)
+        {
+            cellSizes_.resize(2);
+            cellSizes_[0] = 0.1;
+            cellSizes_[1] = 0.25;
+        }
+        // Average positions, average angle and angular velocity
+        virtual void project(const ob::State *state, ob::EuclideanProjection &projection) const
+        {
+            const ompl::base::CompoundState* cstate;
+            cstate = state->as<ompl::base::CompoundState>();
+            const ob::RealVectorStateSpace::StateType *pos = cstate->as<ob::RealVectorStateSpace::StateType>(0);
+            const ob::SO2StateSpace::StateType *rot = cstate->as<ob::SO2StateSpace::StateType>(1);
+            const ob::RealVectorStateSpace::StateType *vel = cstate->as<ob::RealVectorStateSpace::StateType>(2);
+            projection(0) = pos->values[0];
+            projection(1) = pos->values[1];
+        }
+};
+
 // Definition of the ODE for the kinematic car.
 void KinematicCarODE (const oc::ODESolver::StateType& q, const oc::Control* control, oc::ODESolver::StateType& qdot)
 {
@@ -118,10 +147,10 @@ void KinematicCarODE (const oc::ODESolver::StateType& q, const oc::Control* cont
 
     // Zero out qdot
     qdot.resize (q.size (), 0);
-    qdot[0] = v * cos(theta);
-    qdot[1] = v * sin(theta);
+    qdot[0] = delta * cos(theta);
+    qdot[1] = delta * sin(theta);
     qdot[2] = sign * theta_dot;
-    qdot[3] = delta;
+    qdot[3] = u[0];
 }
 
 // This is a callback method invoked after numerical integration.
@@ -231,7 +260,7 @@ void plan(std::vector<Rect> obstacles, std::vector<double> startV, std::vector<d
     // when integration has finished to normalize the orientation values.
     oc::ODESolverPtr odeSolver(new oc::ODEBasicSolver<> (ss.getSpaceInformation(), &KinematicCarODE));
     ss.setStatePropagator(oc::ODESolver::getStatePropagator(odeSolver, CarPostIntegration));
-    ss.getSpaceInformation()->setPropagationStepSize(0.05);
+    //ss.getSpaceInformation()->setPropagationStepSize(0.05);
 
     /// create a start state
     ob::ScopedState<> start(space);
@@ -244,7 +273,7 @@ void plan(std::vector<Rect> obstacles, std::vector<double> startV, std::vector<d
         goal[i] = goalV[i];
 
     /// set the start and goal states
-    ss.setStartAndGoalStates(start, goal, 0.15);
+    ss.setStartAndGoalStates(start, goal, 0.50);
 
     if(benchmark)
     {
@@ -265,7 +294,12 @@ void plan(std::vector<Rect> obstacles, std::vector<double> startV, std::vector<d
     else
     {
         // RRT
-        ompl::base::PlannerPtr planner(new ompl::control::RRT(ss.getSpaceInformation()));
+        //ompl::base::PlannerPtr planner(new ompl::control::RRT(ss.getSpaceInformation()));
+
+        // KPIECE1
+        ompl::base::PlannerPtr planner(new ompl::control::KPIECE1(ss.getSpaceInformation()));
+        space->registerProjection("CarProjection", ob::ProjectionEvaluatorPtr(new CarProjection(space)));
+        planner->as<ompl::control::KPIECE1>()->setProjectionEvaluator("CarProjection");
         ss.setPlanner(planner);
         ss.setup();
 
