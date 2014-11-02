@@ -36,8 +36,9 @@
 
 #include "SMR.h"
 #include "ompl/base/goals/GoalSampleableRegion.h"
-#include "ompl/tools/config/SelfConfig.h"
 #include "ompl/base/ValidStateSampler.h"
+#include "ompl/tools/config/SelfConfig.h"
+#include "ompl/control/spaces/DiscreteControlSpace.h"
 #include <limits>
 
 ompl::control::SMR::SMR(const SpaceInformationPtr &si) : base::Planner(si, "SMR")
@@ -59,7 +60,7 @@ void ompl::control::SMR::setup(void)
 
     //Create SMR
     ompl::base::ValidStateSamplerPtr vsp = si_->allocValidStateSampler(); 
-    Motion* obstacle = new Motion(siC_, 0);
+    obstacle = new Motion(siC_, 0);
     nn_->add(obstacle);
     for(int i = 0; i < nodes_; ++i)
     {
@@ -68,14 +69,37 @@ void ompl::control::SMR::setup(void)
         {
             si_->freeState(m->state);
         }
-        setupTransitions(m);
         nn_->add(m); 
+    }
+
+    std::vector<Motion*> motions;
+    nn_->list(motions);
+    for(int i = 0; i < nodes_; ++i)
+    {
+        setupTransitions(motions[i]);
     }
 }
 
 void ompl::control::SMR::setupTransitions(Motion* m)
 {
+    for(int i = 0; i < actions; ++i)
+    {
+        m->t[i];
+        Control* control = siC_->allocControl();
+        control->as<DiscreteControlSpace::ControlType>()->value = i;
 
+        for(int j = 0; j < trans_; ++j)
+        {
+            Motion* newstate = new Motion();
+            int steps = siC_->propagateWhileValid(m->state, control, siC_->getMinControlDuration(), newstate->state);
+            Motion* nearest = obstacle; 
+            if(steps == siC_->getMinControlDuration())
+            {
+                nearest = nn_->nearest(newstate);
+            }
+            m->t[i][j] += (1/trans_); 
+        }
+    }
 }
 
 void ompl::control::SMR::clear(void)

@@ -158,6 +158,10 @@ namespace ompl
             const double                                   epsilon = 0.0000001;
 
             const double                                   gamma = 0.000001;
+            
+            const int                                      actions = 2;
+
+            Motion*                                        obstacle;
         };
 
     }
