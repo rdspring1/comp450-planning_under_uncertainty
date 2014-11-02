@@ -105,18 +105,12 @@ namespace ompl
             {
             public:
 
-                Motion(void) : state(NULL)
-                {
-                }
+                Motion(void) : state(NULL) {}
 
                 /** \brief Constructor that allocates memory for the state and the control */
-                Motion(const SpaceInformation *si, int id) : state(si->allocState()), id_(id)
-                {
-                }
+                Motion(const SpaceInformation *si, int id) : state(NULL), id_(id) {}
 
-                ~Motion(void)
-                {
-                }
+                ~Motion(void) {}
 
                 /** \brief The state contained by the motion */
                 base::State       *state;
@@ -127,6 +121,9 @@ namespace ompl
                 /** \brief Unique State ID */
                 int id_;
             };
+            
+            /** \brief Setup Transition Probabilities */
+            void setupTransitions(Motion* m);
 
             /** \brief Free the memory allocated by this planner */
             void freeMemory(void);
@@ -153,10 +150,14 @@ namespace ompl
             RNG                                            rng_;
 
             /** \brief n states in roadmap */
-            int                                            nodes_;
+            int                                            nodes_ = 50000;
 
             /** \brief m samples per transition */
-            int                                            trans_;
+            int                                            trans_ = 20;
+
+            const double                                   epsilon = 0.0000001;
+
+            const double                                   gamma = 0.000001;
         };
 
     }

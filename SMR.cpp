@@ -37,6 +37,7 @@
 #include "SMR.h"
 #include "ompl/base/goals/GoalSampleableRegion.h"
 #include "ompl/tools/config/SelfConfig.h"
+#include "ompl/base/ValidStateSampler.h"
 #include <limits>
 
 ompl::control::SMR::SMR(const SpaceInformationPtr &si) : base::Planner(si, "SMR")
@@ -55,7 +56,26 @@ void ompl::control::SMR::setup(void)
     if (!nn_)
         nn_.reset(tools::SelfConfig::getDefaultNearestNeighbors<Motion*>(si_->getStateSpace()));
     nn_->setDistanceFunction(boost::bind(&SMR::distanceFunction, this, _1, _2));
-    //TODO Create SMR
+
+    //Create SMR
+    ompl::base::ValidStateSamplerPtr vsp = si_->allocValidStateSampler(); 
+    Motion* obstacle = new Motion(siC_, 0);
+    nn_->add(obstacle);
+    for(int i = 0; i < nodes_; ++i)
+    {
+        Motion* m = new Motion(siC_, (i+1));
+        while(!vsp->sample(m->state))
+        {
+            si_->freeState(m->state);
+        }
+        setupTransitions(m);
+        nn_->add(m); 
+    }
+}
+
+void ompl::control::SMR::setupTransitions(Motion* m)
+{
+
 }
 
 void ompl::control::SMR::clear(void)
