@@ -2,7 +2,8 @@
 #include <ompl/control/SpaceInformation.h>
 #include <ompl/base/spaces/SO2StateSpace.h>
 #include <ompl/base/spaces/RealVectorStateSpace.h>
-#include <ompl/control/spaces/RealVectorControlSpace.h>
+#include <ompl/base/spaces/DiscreteStateSpace.h>
+#include <ompl/control/spaces/DiscreteControlSpace.h>
 #include <ompl/control/ODESolver.h>
 #include <ompl/control/SimpleSetup.h>
 #include <ompl/tools/benchmark/Benchmark.h>
@@ -19,7 +20,6 @@
 
 // Planner
 #include <ompl/control/planners/rrt/RRT.h>
-#include <ompl/control/planners/kpiece/KPIECE1.h>
 
 //environment parsing
 const std::string startStr = "start";
@@ -108,57 +108,35 @@ bool lineIntersection(Point2D ours0, Point2D ours1, Point2D theirs0, Point2D the
     return false;
 }
 
-class CarProjection : public ob::ProjectionEvaluator
-{
-    public:
-        CarProjection(const ob::StateSpacePtr &space) : ob::ProjectionEvaluator(space) {}
-
-        virtual unsigned int getDimension(void) const
-        {
-            return 2;
-        }
-        virtual void defaultCellSizes(void)
-        {
-            cellSizes_.resize(2);
-            cellSizes_[0] = 0.1;
-            cellSizes_[1] = 0.25;
-        }
-        // Average positions, average angle and angular velocity
-        virtual void project(const ob::State *state, ob::EuclideanProjection &projection) const
-        {
-            const ompl::base::CompoundState* cstate;
-            cstate = state->as<ompl::base::CompoundState>();
-            const ob::RealVectorStateSpace::StateType *pos = cstate->as<ob::RealVectorStateSpace::StateType>(0);
-            const ob::SO2StateSpace::StateType *rot = cstate->as<ob::SO2StateSpace::StateType>(1);
-            const ob::RealVectorStateSpace::StateType *vel = cstate->as<ob::RealVectorStateSpace::StateType>(2);
-            projection(0) = pos->values[0];
-            projection(1) = pos->values[1];
-        }
-};
-
 // Definition of the ODE for the kinematic car.
 void KinematicCarODE (const oc::ODESolver::StateType& q, const oc::Control* control, oc::ODESolver::StateType& qdot)
 {
-    const double* u = control->as<oc::RealVectorControlSpace::ControlType>()->values;
-    double sign = bool(std::floor(u[0])) ? 1.0 : -1.0;
+    const int u = control->as<oc::DiscreteControlSpace::ControlType>()->value;
+    double sign = bool(std::floor(u)) ? 1.0 : -1.0;
     const double theta = q[2];
-    const double v = q[3];
     const double theta_dot = delta / radius;
 
+    //std::cout << "x: " << q[0] << " y: " << q[1] << " theta: " << q[2] << "u: " << u << std::endl;
+
     // Zero out qdot
-    qdot.resize (q.size (), 0);
+    qdot.resize (q.size(), 0);
     qdot[0] = delta * cos(theta);
     qdot[1] = delta * sin(theta);
     qdot[2] = sign * theta_dot;
-    qdot[3] = u[0];
 }
 
 // This is a callback method invoked after numerical integration.
-void CarPostIntegration (const ob::State* /*state*/, const oc::Control* /*control*/, const double /*duration*/, ob::State *result)
+void CarPostIntegration (const ob::State* state, const oc::Control* control, const double duration, ob::State *result)
 {
+    const int u = control->as<oc::DiscreteControlSpace::ControlType>()->value;
+    ompl::base::CompoundState* cstate = result->as<ompl::base::CompoundState>();
+    ompl::base::SO2StateSpace::StateType* so2state = cstate->as<ompl::base::SO2StateSpace::StateType>(1);
+    ompl::base::DiscreteStateSpace::StateType* dstate = cstate->as<ompl::base::DiscreteStateSpace::StateType>(2);
+    dstate->value = u;
+
     // Normalize orientation between -pi and pi
     ob::SO2StateSpace SO2;
-    SO2.enforceBounds (result->as<ob::CompoundState>()->as<ob::SO2StateSpace::StateType>(0));
+    SO2.enforceBounds (so2state);
 }
 
 bool isStateValidCar(const ob::State *state, const double minBound, const double maxBound, const std::vector<Rect> obstacles)
@@ -195,13 +173,11 @@ bool isStateValidCar(const ob::State *state, const double minBound, const double
     for(const Rect& r : obstacles)
     {
         // None of the points of square robot are contained inside of the obstacle 
-        /*
-           for(int j = 0; j < pts.size(); ++j)
-           {
-           if(pts[j].first >= r[0].first && pts[j].first <= r[2].first && pts[j].second >= r[0].second && pts[j].second <= r[2].second)
-           return false;
-           }
-         */
+        for(int j = 0; j < pts.size(); ++j)
+        {
+            if(pts[j].first >= r[0].first && pts[j].first <= r[2].first && pts[j].second >= r[0].second && pts[j].second <= r[2].second)
+                return false;
+        }
 
         // Edge of rectangle r
         for(int i = 0; i < r.size(); ++i)
@@ -223,10 +199,10 @@ bool isStateValidCar(const ob::State *state, const double minBound, const double
 
 /// @cond IGNORE
 // turning angle - left=0 or right=1
-class CarControlSpace : public oc::RealVectorControlSpace
+class CarControlSpace : public oc::DiscreteControlSpace
 {
     public:
-        CarControlSpace(const ob::StateSpacePtr &stateSpace) : oc::RealVectorControlSpace(stateSpace, 1) {}
+        CarControlSpace(const ob::StateSpacePtr &stateSpace) : oc::DiscreteControlSpace(stateSpace, 0, 1) {}
 };
 /// @endcond
 
@@ -237,18 +213,11 @@ void plan(std::vector<Rect> obstacles, std::vector<double> startV, std::vector<d
     ompl::base::StateSpacePtr r2(new ompl::base::RealVectorStateSpace(2));
     r2->as<ompl::base::RealVectorStateSpace>()->setBounds(0.0, 10.0);
     ompl::base::StateSpacePtr so2(new ompl::base::SO2StateSpace());
-    ompl::base::StateSpacePtr r(new ompl::base::RealVectorStateSpace(1));
-    r->as<ompl::base::RealVectorStateSpace>()->setBounds(0.0, 2.0);
-    space = r2 + so2 + r;
+    ompl::base::StateSpacePtr d(new ompl::base::DiscreteStateSpace(0, 1));
+    space = r2 + so2 + d;
 
     // Create a control space
     oc::ControlSpacePtr cspace(new CarControlSpace(space));
-
-    // set the bounds for the control space
-    ob::RealVectorBounds cbounds(1);
-    cbounds.setLow(0);
-    cbounds.setHigh(2);
-    cspace->as<CarControlSpace>()->setBounds(cbounds);
 
     // define a simple setup class
     oc::SimpleSetup ss(cspace);
@@ -260,7 +229,7 @@ void plan(std::vector<Rect> obstacles, std::vector<double> startV, std::vector<d
     // when integration has finished to normalize the orientation values.
     oc::ODESolverPtr odeSolver(new oc::ODEBasicSolver<> (ss.getSpaceInformation(), &KinematicCarODE));
     ss.setStatePropagator(oc::ODESolver::getStatePropagator(odeSolver, CarPostIntegration));
-    //ss.getSpaceInformation()->setPropagationStepSize(0.05);
+    ss.getSpaceInformation()->setPropagationStepSize(0.08);
 
     /// create a start state
     ob::ScopedState<> start(space);
@@ -273,7 +242,7 @@ void plan(std::vector<Rect> obstacles, std::vector<double> startV, std::vector<d
         goal[i] = goalV[i];
 
     /// set the start and goal states
-    ss.setStartAndGoalStates(start, goal, 0.50);
+    ss.setStartAndGoalStates(start, goal, 0.05);
 
     if(benchmark)
     {
@@ -294,12 +263,8 @@ void plan(std::vector<Rect> obstacles, std::vector<double> startV, std::vector<d
     else
     {
         // RRT
-        //ompl::base::PlannerPtr planner(new ompl::control::RRT(ss.getSpaceInformation()));
+        ompl::base::PlannerPtr planner(new ompl::control::RRT(ss.getSpaceInformation()));
 
-        // KPIECE1
-        ompl::base::PlannerPtr planner(new ompl::control::KPIECE1(ss.getSpaceInformation()));
-        space->registerProjection("CarProjection", ob::ProjectionEvaluatorPtr(new CarProjection(space)));
-        planner->as<ompl::control::KPIECE1>()->setProjectionEvaluator("CarProjection");
         ss.setPlanner(planner);
         ss.setup();
 
