@@ -21,6 +21,7 @@
 
 // Planner
 #include <ompl/control/planners/rrt/RRT.h>
+#include "SMR.h"
 
 //environment parsing
 const std::string startStr = "start";
@@ -250,7 +251,8 @@ void plan(std::vector<Rect> obstacles, std::vector<double> startV, std::vector<d
         // Benchmark Code - Project 5
         std::string title = "benchmark" + env;
         ompl::tools::Benchmark b(ss, title);
-        b.addPlanner(ompl::base::PlannerPtr(new ompl::control::RRT(ss.getSpaceInformation())));
+        //b.addPlanner(ompl::base::PlannerPtr(new ompl::control::RRT(ss.getSpaceInformation())));
+        b.addPlanner(ompl::base::PlannerPtr(new ompl::control::SMR(ss.getSpaceInformation())));
 
         ompl::tools::Benchmark::Request req;
         req.maxTime = 20.0;
@@ -264,7 +266,10 @@ void plan(std::vector<Rect> obstacles, std::vector<double> startV, std::vector<d
     else
     {
         // RRT
-        ompl::base::PlannerPtr planner(new ompl::control::RRT(ss.getSpaceInformation()));
+        //ompl::base::PlannerPtr planner(new ompl::control::RRT(ss.getSpaceInformation()));
+
+        // SMR
+        ompl::base::PlannerPtr planner(new ompl::control::SMR(ss.getSpaceInformation()));
 
         ss.setPlanner(planner);
         ss.setup();
