@@ -1,14 +1,15 @@
 // OMPL setup
-#include <ompl/control/SpaceInformation.h>
+#include <ompl/config.h>
 #include <ompl/base/spaces/SO2StateSpace.h>
 #include <ompl/base/spaces/RealVectorStateSpace.h>
 #include <ompl/base/spaces/DiscreteStateSpace.h>
 #include <ompl/control/spaces/DiscreteControlSpace.h>
 #include <ompl/control/ODESolver.h>
 #include <ompl/control/SimpleSetup.h>
+#include <ompl/control/SpaceInformation.h>
 #include <ompl/tools/benchmark/Benchmark.h>
+#include <ompl/util/RandomNumbers.h>
 #include <omplapp/config.h>
-#include <ompl/config.h>
 
 // C++ library
 #include <iostream>
@@ -113,16 +114,16 @@ void KinematicCarODE (const oc::ODESolver::StateType& q, const oc::Control* cont
 {
     const int u = control->as<oc::DiscreteControlSpace::ControlType>()->value;
     double sign = bool(std::floor(u)) ? 1.0 : -1.0;
-    const double theta = q[2];
-    const double theta_dot = delta / radius;
 
-    //std::cout << "x: " << q[0] << " y: " << q[1] << " theta: " << q[2] << "u: " << u << std::endl;
+    ompl::RNG sample;
+    const double Delta = sample.gaussian(delta, delta_sd[u]);
+    const double Radius = sample.gaussian(radius, radius_sd[u]);
 
     // Zero out qdot
     qdot.resize (q.size(), 0);
-    qdot[0] = delta * cos(theta);
-    qdot[1] = delta * sin(theta);
-    qdot[2] = sign * theta_dot;
+    qdot[0] = Delta * cos(q[2]);
+    qdot[1] = Delta * sin(q[2]);
+    qdot[2] = sign * Delta / Radius;
 }
 
 // This is a callback method invoked after numerical integration.
