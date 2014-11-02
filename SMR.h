@@ -39,6 +39,7 @@
 
 #include "ompl/control/planners/PlannerIncludes.h"
 #include "ompl/datastructures/NearestNeighbors.h"
+#include <map>
 
 namespace ompl
 {
@@ -75,23 +76,41 @@ namespace ompl
 
             virtual void setup(void);
 
+            /** \brief Set the number of nodes in the roadmap */
+            void setNodes(int N)
+            {
+                nodes_ = N;
+            }
+
+            /** \brief Get the number of nodes in the roadmap */
+            int getNodes(void) const
+            {
+                return nodes_;
+            }
+
+            /** \brief Return the number of samples generated per transition */
+            int getTransitionStates(void) const
+            {
+                return trans_;
+            }
+
+            /** \brief Set the number of samples taken for each transition */
+            void setTransitionStates(int M)
+            {
+                trans_ = M;
+            }
         protected:
-
-
-            /** \brief Representation of a motion
-
-                This only contains pointers to parent motions as we
-                only need to go backwards in the tree. */
+            /** \brief Representation of a motion */
             class Motion
             {
             public:
 
-                Motion(void) : state(NULL), control(NULL), steps(0), parent(NULL)
+                Motion(void) : state(NULL)
                 {
                 }
 
                 /** \brief Constructor that allocates memory for the state and the control */
-                Motion(const SpaceInformation *si) : state(si->allocState()), control(si->allocControl()), steps(0), parent(NULL)
+                Motion(const SpaceInformation *si, int id) : state(si->allocState()), id_(id)
                 {
                 }
 
@@ -102,14 +121,11 @@ namespace ompl
                 /** \brief The state contained by the motion */
                 base::State       *state;
 
-                /** \brief The control contained by the motion */
-                Control           *control;
-
-                /** \brief The number of steps the control is applied for */
-                unsigned int       steps;
-
-                /** \brief The parent motion in the exploration tree */
-                Motion            *parent;
+                /** \brief The probability of moving to state T after applying control u - Transition Probability List */
+                std::map<int, std::map<int, double>> t; 
+                
+                /** \brief Unique State ID */
+                int id_;
             };
 
             /** \brief Free the memory allocated by this planner */
@@ -135,6 +151,12 @@ namespace ompl
 
             /** \brief The random number generator */
             RNG                                            rng_;
+
+            /** \brief n states in roadmap */
+            int                                            nodes_;
+
+            /** \brief m samples per transition */
+            int                                            trans_;
         };
 
     }

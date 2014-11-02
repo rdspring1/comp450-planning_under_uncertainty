@@ -55,7 +55,7 @@ void ompl::control::SMR::setup(void)
     if (!nn_)
         nn_.reset(tools::SelfConfig::getDefaultNearestNeighbors<Motion*>(si_->getStateSpace()));
     nn_->setDistanceFunction(boost::bind(&SMR::distanceFunction, this, _1, _2));
-    //TODO
+    //TODO Create SMR
 }
 
 void ompl::control::SMR::clear(void)
@@ -78,8 +78,6 @@ void ompl::control::SMR::freeMemory(void)
         {
             if (motions[i]->state)
                 si_->freeState(motions[i]->state);
-            if (motions[i]->control)
-                siC_->freeControl(motions[i]->control);
             delete motions[i];
         }
     }
@@ -87,10 +85,12 @@ void ompl::control::SMR::freeMemory(void)
 
 ompl::base::PlannerStatus ompl::control::SMR::solve(const base::PlannerTerminationCondition &ptc)
 {
-    //TODO
+    //TODO Generate Policy using SMR if new start/goal
+    //TODO Use Policy to create a path between start/goal; Return automatically if an obstacle is encountered
 }
 
 void ompl::control::SMR::getPlannerData(base::PlannerData &data) const
 {
-    //TODO
+    Planner::getPlannerData(data);
+    //TODO Return policy for SMR and start/goal objectives
 }
