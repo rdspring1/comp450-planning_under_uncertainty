@@ -40,6 +40,7 @@
 #include "ompl/tools/config/SelfConfig.h"
 #include "ompl/control/spaces/DiscreteControlSpace.h"
 #include <limits>
+#include <math.h>
 
 ompl::control::SMR::SMR(const SpaceInformationPtr &si) : base::Planner(si, "SMR")
 {
@@ -62,9 +63,9 @@ void ompl::control::SMR::setup(void)
     ompl::base::ValidStateSamplerPtr vsp = si_->allocValidStateSampler(); 
     obstacle = new Motion(siC_, 0);
     nn_->add(obstacle);
-    for(int i = 0; i < nodes_; ++i)
+    for(int i = 1; i < nodes_; ++i)
     {
-        Motion* m = new Motion(siC_, (i+1));
+        Motion* m = new Motion(siC_, i);
         while(!vsp->sample(m->state))
         {
             si_->freeState(m->state);
@@ -74,7 +75,7 @@ void ompl::control::SMR::setup(void)
 
     std::vector<Motion*> motions;
     nn_->list(motions);
-    for(int i = 0; i < nodes_; ++i)
+    for(int i = 1; i < nodes_; ++i)
     {
         setupTransitions(motions[i]);
     }
@@ -127,9 +128,68 @@ void ompl::control::SMR::freeMemory(void)
     }
 }
 
+double ompl::control::SMR::ps(int id, base::State* state, base::Goal* goal)
+{
+    if(id == 0)
+    {
+        return 0;
+    }
+    else if(goal->isSatisfied(state))
+    {
+        return 1;
+    }
+    else
+    {
+        double max_value = 0;
+        for(auto& value : smrtable[id])
+        {
+            max_value = std::max(max_value, value.second);
+        }
+        return max_value;
+    }
+}
+
 ompl::base::PlannerStatus ompl::control::SMR::solve(const base::PlannerTerminationCondition &ptc)
 {
     //TODO Generate Policy using SMR if new start/goal
+    checkValidity();
+    base::Goal                   *goal = pdef_->getGoal().get();
+
+    int startSize = 0;
+    while (const base::State *st = pis_.nextStart())
+    {
+        Motion *motion = new Motion(siC_, nn_->size());
+        si_->copyState(motion->state, st);
+        nn_->add(motion);
+        ++startSize;
+    }
+
+    std::vector<Motion*> motions;
+    nn_->list(motions);
+    for(int i = 0; i < startSize; ++i)
+    {
+        setupTransitions(motions[nodes_++]);
+    }
+
+    double max_change = epsilon + 1;
+    for(int i = 0; i < nodes_ && max_change > epsilon; ++i)
+    {
+        max_change = epsilon + 1;
+        for(int j = 0; j < nodes_; ++j)
+        {
+            for(auto& action : motions[j]->t)
+            {
+                double newsuccess = 0;
+                for(auto& nextstate : action.second)
+                {
+                    newsuccess += (nextstate.second * (-gamma + ps(nextstate.first, motions[nextstate.first]->state, goal)));
+                }
+                double change = smrtable[j][action.first] - newsuccess;
+                max_change = std::max(max_change, change);
+                smrtable[j][action.first] = newsuccess;
+            }
+        }
+    }
     //TODO Use Policy to create a path between start/goal; Return automatically if an obstacle is encountered
 }
 
