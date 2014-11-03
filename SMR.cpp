@@ -36,13 +36,15 @@
 
 #include "SMR.h"
 #include "ompl/base/goals/GoalSampleableRegion.h"
-#include "ompl/base/ValidStateSampler.h"
 #include "ompl/tools/config/SelfConfig.h"
 #include "ompl/control/spaces/DiscreteControlSpace.h"
 #include <limits>
 #include <math.h>
 #include <memory>
 
+#include <ompl/base/spaces/SO2StateSpace.h>
+#include <ompl/base/spaces/RealVectorStateSpace.h>
+#include <ompl/base/spaces/DiscreteStateSpace.h>
 ompl::control::SMR::SMR(const SpaceInformationPtr &si) : base::Planner(si, "SMR")
 {
     siC_ = si.get();
@@ -61,25 +63,30 @@ void ompl::control::SMR::setup(void)
     nn_->setDistanceFunction(boost::bind(&SMR::distanceFunction, this, _1, _2));
 
     //Create SMR
-    ompl::base::ValidStateSamplerPtr vsp = si_->allocValidStateSampler(); 
-    obstacle = new Motion(siC_, 0);
-    nn_->add(obstacle);
-    for(int i = 1; i < nodes_; ++i)
+    if(!sampler_)
+        sampler_ = si_->allocValidStateSampler(); 
+
+    for(int i = 0; i < nodes_; ++i)
     {
-        Motion* m = new Motion(siC_, i);
-        while(!vsp->sample(m->state))
+        Motion* m = new Motion(siC_, (i+1));
+        while(!sampler_->sample(m->state))
         {
             si_->freeState(m->state);
+            m->state = si_->allocState();
         }
         nn_->add(m); 
     }
 
     std::vector<Motion*> motions;
     nn_->list(motions);
-    for(int i = 1; i < nodes_; ++i)
+    for(int i = 0; i < motions.size(); ++i)
     {
-        setupTransitions(motions[i]);
+        if(motions[i]->id_ != 0)
+        {
+            setupTransitions(motions[i]);
+        }
     }
+    std::cout << "Finish Setup" << std::endl;
 }
 
 void ompl::control::SMR::setupTransitions(Motion* m)
@@ -92,14 +99,14 @@ void ompl::control::SMR::setupTransitions(Motion* m)
 
         for(int j = 0; j < trans_; ++j)
         {
-            Motion* newstate = new Motion();
+            Motion* newstate = new Motion(siC_, -1);
             int steps = siC_->propagateWhileValid(m->state, control, siC_->getMinControlDuration(), newstate->state);
-            Motion* nearest = obstacle; 
+            int nearest = obstacle; 
             if(steps == siC_->getMinControlDuration())
-            {
-                nearest = nn_->nearest(newstate);
+            { 
+                nearest = nn_->nearest(newstate)->id_;
             }
-            m->t[i][j] += (1/trans_); 
+            m->t[i][nearest] += (1/trans_); 
         }
     }
 }
@@ -131,7 +138,7 @@ void ompl::control::SMR::freeMemory(void)
 
 double ompl::control::SMR::ps(int id, base::State* state, base::Goal* goal)
 {
-    if(id == 0)
+    if(id == obstacle)
     {
         return 0;
     }
@@ -162,8 +169,8 @@ ompl::base::PlannerStatus ompl::control::SMR::solve(const base::PlannerTerminati
     {
         Motion *motion = new Motion(siC_, nn_->size());
         si_->copyState(motion->state, st);
-        nn_->add(motion);
         startStates.push_back(nn_->size());
+        nn_->add(motion);
         ++startSize;
     }
 
@@ -218,7 +225,7 @@ ompl::base::PlannerStatus ompl::control::SMR::solve(const base::PlannerTerminati
         Control* control = siC_->allocControl();
         control->as<DiscreteControlSpace::ControlType>()->value = action;
 
-        result = new Motion();
+        result = new Motion(siC_, -1);
         int steps = siC_->propagateWhileValid(motion->state, control, siC_->getMinControlDuration(), result->state);
         
         if(steps != siC_->getMinControlDuration())
@@ -239,7 +246,6 @@ ompl::base::PlannerStatus ompl::control::SMR::solve(const base::PlannerTerminati
 
     path->append(result->state);
     pdef_->addSolutionPath(base::PathPtr(path));
-
     return base::PlannerStatus(solved, false);
 }
 

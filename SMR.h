@@ -39,6 +39,7 @@
 
 #include "ompl/control/planners/PlannerIncludes.h"
 #include "ompl/datastructures/NearestNeighbors.h"
+#include "ompl/base/ValidStateSampler.h"
 #include <map>
 
 namespace ompl
@@ -105,10 +106,10 @@ namespace ompl
                 {
                     public:
 
-                        Motion(void) : state(NULL) {}
+                        Motion(void) : state(NULL), id_(0) {}
 
-                        /** \brief Constructor that allocates memory for the state and the control */
-                        Motion(const SpaceInformation *si, int id) : state(NULL), id_(id) {}
+                        /** \brief Constructor that allocates memory for the state */
+                        Motion(const SpaceInformation *si, int id) : state(si->allocState()), id_(id) {}
 
                         ~Motion(void) {}
 
@@ -137,8 +138,8 @@ namespace ompl
                     return si_->distance(a->state, b->state);
                 }
 
-                /** \brief State sampler */
-                base::StateSamplerPtr                          sampler_;
+                /** \brief Valid State sampler */
+                base::ValidStateSamplerPtr                          sampler_;
 
                 /** \brief Control sampler */
                 DirectedControlSamplerPtr                      controlSampler_;
@@ -164,7 +165,9 @@ namespace ompl
 
                 const int                                      actions = 2;
 
-                Motion*                                        obstacle;
+                const int                                      obstacle = 0;
+    
+                const double                                   alpha = 2;
 
                 /** \brief SMR DP Lookup Table - State, Action = Success Rate */
                 std::map<int, std::map<int, double>> smrtable;
