@@ -93,7 +93,6 @@ void ompl::control::SMR::setupTransitions(Motion* m)
 {
     for(int i = 0; i < actions; ++i)
     {
-        m->t[i];
         Control* control = siC_->allocControl();
         control->as<DiscreteControlSpace::ControlType>()->value = i;
 
@@ -106,7 +105,7 @@ void ompl::control::SMR::setupTransitions(Motion* m)
             { 
                 nearest = nn_->nearest(newstate)->id_;
             }
-            m->t[i][nearest] += (1/trans_); 
+            m->t[i][nearest] += (1.0/trans_); 
         }
     }
 }
@@ -144,6 +143,7 @@ double ompl::control::SMR::ps(int id, base::State* state, base::Goal* goal)
     }
     else if(goal->isSatisfied(state))
     {
+        //std::cout << "goal: " << id << std::endl;
         return 1;
     }
     else
@@ -162,6 +162,7 @@ ompl::base::PlannerStatus ompl::control::SMR::solve(const base::PlannerTerminati
     // Generate Policy using SMR if new start/goal
     checkValidity();
     base::Goal                   *goal = pdef_->getGoal().get();
+    base::GoalSampleableRegion *goal_s = dynamic_cast<base::GoalSampleableRegion*>(goal);
 
     std::vector<int> startStates;
     int startSize = 0;
@@ -172,6 +173,21 @@ ompl::base::PlannerStatus ompl::control::SMR::solve(const base::PlannerTerminati
         startStates.push_back(nn_->size());
         nn_->add(motion);
         ++startSize;
+    }
+
+    for(int i = 0; i < startSize; ++i)
+    {
+        base::State* st = si_->allocState();
+        if (goal_s && goal_s->canSample())
+            goal_s->sampleGoal(st);
+
+        Motion *motion = new Motion(siC_, nn_->size());
+        si_->copyState(motion->state, st);
+        nn_->add(motion);
+        for(int i = 0; i < actions; ++i)
+        {
+            smrtable[motion->id_][i] = 1;
+        }
     }
 
     std::vector<Motion*> motions;
@@ -200,15 +216,30 @@ ompl::base::PlannerStatus ompl::control::SMR::solve(const base::PlannerTerminati
             }
         }
     }
+    std::cout << "Finish Value Iteration" << std::endl;
+    //for(auto& state : smrtable)
+    //    std::cout << state.first << " " << state.second[0] << " " << state.second[1] << std::endl;
 
     // Use Policy to create a path between start/goal; Return automatically if an obstacle is encountered
     /* set the solution path */
     bool solved = false;
+    double  approxdif = std::numeric_limits<double>::infinity();
     Motion* motion = motions[startStates.front()];
-    Motion* result = NULL;
+    std::unique_ptr<Motion> result(nullptr);
     PathControl *path = new PathControl(si_);
     while(!ptc)
     {
+
+        const ompl::base::CompoundState* cstate = motion->state->as<ompl::base::CompoundState>();
+        const ompl::base::RealVectorStateSpace::StateType* r2state = cstate->as<ompl::base::RealVectorStateSpace::StateType>(0);
+        const ompl::base::SO2StateSpace::StateType* so2state = cstate->as<ompl::base::SO2StateSpace::StateType>(1);
+
+        double x = r2state->values[0];
+        double y = r2state->values[1];
+        double theta = so2state->value;    
+
+        std::cout << x << " " << y << " " << theta << std::endl;
+
         // Select Action based on Current State
         int action = 0;
         double max_value = 0;
@@ -225,28 +256,31 @@ ompl::base::PlannerStatus ompl::control::SMR::solve(const base::PlannerTerminati
         Control* control = siC_->allocControl();
         control->as<DiscreteControlSpace::ControlType>()->value = action;
 
-        result = new Motion(siC_, -1);
+        result = std::unique_ptr<Motion>(new Motion(siC_, -1));
         int steps = siC_->propagateWhileValid(motion->state, control, siC_->getMinControlDuration(), result->state);
-        
+
+        solved = goal->isSatisfied(motion->state, &approxdif);
         if(steps != siC_->getMinControlDuration())
         {
+            std::cout << "obstacle" << std::endl;
             break;
         }
-        else if(goal->isSatisfied(result->state))
+        else if(solved)
         {
-            solved = true;
+            std::cout << "goal" << std::endl;
             break;
         }
         else
         {
             path->append(motion->state, control, siC_->getMinControlDuration() * siC_->getPropagationStepSize());
-            motion = nn_->nearest(result);
+            motion = nn_->nearest(result.get());
         }
     }
 
-    path->append(result->state);
-    pdef_->addSolutionPath(base::PathPtr(path));
-    return base::PlannerStatus(solved, false);
+    if(result)
+        path->append(result->state);
+    pdef_->addSolutionPath(base::PathPtr(path), !solved, approxdif);
+    return base::PlannerStatus(true, !solved);
 }
 
 void ompl::control::SMR::getPlannerData(base::PlannerData &data) const
