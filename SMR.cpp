@@ -40,7 +40,6 @@
 #include "ompl/control/spaces/DiscreteControlSpace.h"
 #include <limits>
 #include <math.h>
-#include <memory>
 
 #include <ompl/base/spaces/SO2StateSpace.h>
 #include <ompl/base/spaces/RealVectorStateSpace.h>
@@ -59,7 +58,7 @@ void ompl::control::SMR::setup(void)
 {
     base::Planner::setup();
     if (!nn_)
-        nn_.reset(tools::SelfConfig::getDefaultNearestNeighbors<Motion*>(si_->getStateSpace()));
+        nn_.reset(tools::SelfConfig::getDefaultNearestNeighbors<std::shared_ptr<Motion>>(si_->getStateSpace()));
     nn_->setDistanceFunction(boost::bind(&SMR::distanceFunction, this, _1, _2));
 
     //Create SMR
@@ -68,24 +67,16 @@ void ompl::control::SMR::setup(void)
 
     for(int i = 0; i < nodes_; ++i)
     {
-        Motion* m = new Motion(siC_, (i+1));
+        std::shared_ptr<Motion> m(new Motion(siC_, (i+1)));
         while(!sampler_->sample(m->state))
         {
             si_->freeState(m->state);
             m->state = si_->allocState();
         }
         nn_->add(m); 
+	nodeslist.push_back(m);
     }
 
-    std::vector<Motion*> motions;
-    nn_->list(motions);
-    for(int i = 0; i < motions.size(); ++i)
-    {
-        if(motions[i]->id_ != 0)
-        {
-            setupTransitions(motions[i]);
-        }
-    }
     std::cout << "Finish Setup" << std::endl;
 }
 
@@ -98,7 +89,7 @@ void ompl::control::SMR::setupTransitions(Motion* m)
 
         for(int j = 0; j < trans_; ++j)
         {
-            Motion* newstate = new Motion(siC_, -1);
+            std::shared_ptr<Motion> newstate(new Motion(siC_, -1));
             int steps = siC_->propagateWhileValid(m->state, control, siC_->getMinControlDuration(), newstate->state);
             int nearest = obstacle; 
             if(steps == siC_->getMinControlDuration())
@@ -114,24 +105,15 @@ void ompl::control::SMR::clear(void)
 {
     Planner::clear();
     sampler_.reset();
-    controlSampler_.reset();
     freeMemory();
-    if (nn_)
-        nn_->clear();
 }
 
 void ompl::control::SMR::freeMemory(void)
 {
-    if (nn_)
+    if(nn_)
     {
-        std::vector<Motion*> motions;
-        nn_->list(motions);
-        for (unsigned int i = 0 ; i < motions.size() ; ++i)
-        {
-            if (motions[i]->state)
-                si_->freeState(motions[i]->state);
-            delete motions[i];
-        }
+
+
     }
 }
 
@@ -165,37 +147,32 @@ ompl::base::PlannerStatus ompl::control::SMR::solve(const base::PlannerTerminati
     base::GoalSampleableRegion *goal_s = dynamic_cast<base::GoalSampleableRegion*>(goal);
 
     std::vector<int> startStates;
-    int startSize = 0;
     while (const base::State *st = pis_.nextStart())
     {
-        Motion *motion = new Motion(siC_, nn_->size());
+        std::shared_ptr<Motion> motion(new Motion(siC_, nn_->size()));
         si_->copyState(motion->state, st);
-        startStates.push_back(nn_->size());
+	startStates.push_back(nn_->size());
+        nodeslist.push_back(motion);
         nn_->add(motion);
-        ++startSize;
     }
 
-    for(int i = 0; i < startSize; ++i)
+    for(int i = 0; i < startStates.size(); ++i)
     {
         base::State* st = si_->allocState();
         if (goal_s && goal_s->canSample())
             goal_s->sampleGoal(st);
 
-        Motion *motion = new Motion(siC_, nn_->size());
+        std::shared_ptr<Motion> motion(new Motion(siC_, nn_->size()));
         si_->copyState(motion->state, st);
+	nodeslist.push_back(motion);
         nn_->add(motion);
-        for(int i = 0; i < actions; ++i)
-        {
-            smrtable[motion->id_][i] = 1;
-        }
     }
 
-    std::vector<Motion*> motions;
-    nn_->list(motions);
-    for(int i = 0; i < startSize; ++i)
+    for(std::shared_ptr<Motion>& m : nodeslist)
     {
-        setupTransitions(motions[nodes_++]);
+        setupTransitions(m.get());
     }
+    nodes_ = nodeslist.size();
 
     double max_change = epsilon + 1;
     for(int i = 0; i < nodes_ && max_change > epsilon; ++i)
@@ -203,16 +180,17 @@ ompl::base::PlannerStatus ompl::control::SMR::solve(const base::PlannerTerminati
         max_change = epsilon + 1;
         for(int j = 0; j < nodes_; ++j)
         {
-            for(auto& action : motions[j]->t)
+	    int id = nodeslist[j]->id_;
+            for(auto& action : nodeslist[j]->t)
             {
                 double newsuccess = 0;
                 for(auto& nextstate : action.second)
                 {
-                    newsuccess += (nextstate.second * (-gamma + ps(nextstate.first, motions[nextstate.first]->state, goal)));
+                    newsuccess += (nextstate.second * (-gamma + ps(nextstate.first, nodeslist[nextstate.first]->state, goal)));
                 }
-                double change = smrtable[j][action.first] - newsuccess;
+                double change = smrtable[id][action.first] - newsuccess;
                 max_change = std::max(max_change, change);
-                smrtable[j][action.first] = newsuccess;
+                smrtable[id][action.first] = newsuccess;
             }
         }
     }
@@ -224,12 +202,12 @@ ompl::base::PlannerStatus ompl::control::SMR::solve(const base::PlannerTerminati
     /* set the solution path */
     bool solved = false;
     double  approxdif = std::numeric_limits<double>::infinity();
-    Motion* motion = motions[startStates.front()];
+    std::shared_ptr<Motion> motion = nodeslist[startStates.front()];
     std::unique_ptr<Motion> result(nullptr);
     PathControl *path = new PathControl(si_);
     while(!ptc)
     {
-
+	/*
         const ompl::base::CompoundState* cstate = motion->state->as<ompl::base::CompoundState>();
         const ompl::base::RealVectorStateSpace::StateType* r2state = cstate->as<ompl::base::RealVectorStateSpace::StateType>(0);
         const ompl::base::SO2StateSpace::StateType* so2state = cstate->as<ompl::base::SO2StateSpace::StateType>(1);
@@ -238,12 +216,14 @@ ompl::base::PlannerStatus ompl::control::SMR::solve(const base::PlannerTerminati
         double y = r2state->values[1];
         double theta = so2state->value;    
 
-        std::cout << x << " " << y << " " << theta << std::endl;
+        std::cout << motion << " " <<  x << " " << y << " " << theta << std::endl;
+	*/
 
+	std::shared_ptr<Motion> nearest = nn_->nearest(motion);
         // Select Action based on Current State
         int action = 0;
         double max_value = 0;
-        for(auto& value : smrtable[motion->id_])
+        for(auto& value : smrtable[nearest->id_])
         {
             if(value.second > max_value)
             {
@@ -255,10 +235,9 @@ ompl::base::PlannerStatus ompl::control::SMR::solve(const base::PlannerTerminati
         // Propagate (CurrentState, Action, Steps, NextState)
         Control* control = siC_->allocControl();
         control->as<DiscreteControlSpace::ControlType>()->value = action;
-
         result = std::unique_ptr<Motion>(new Motion(siC_, -1));
-        int steps = siC_->propagateWhileValid(motion->state, control, siC_->getMinControlDuration(), result->state);
 
+        int steps = siC_->propagateWhileValid(motion->state, control, siC_->getMinControlDuration(), result->state);
         solved = goal->isSatisfied(motion->state, &approxdif);
         if(steps != siC_->getMinControlDuration())
         {
@@ -273,7 +252,7 @@ ompl::base::PlannerStatus ompl::control::SMR::solve(const base::PlannerTerminati
         else
         {
             path->append(motion->state, control, siC_->getMinControlDuration() * siC_->getPropagationStepSize());
-            motion = nn_->nearest(result.get());
+	    motion = std::move(result);
         }
     }
 

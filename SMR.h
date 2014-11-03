@@ -40,6 +40,7 @@
 #include "ompl/control/planners/PlannerIncludes.h"
 #include "ompl/datastructures/NearestNeighbors.h"
 #include "ompl/base/ValidStateSampler.h"
+#include <memory>
 #include <map>
 
 namespace ompl
@@ -72,7 +73,7 @@ namespace ompl
                 template<template<typename T> class NN>
                     void setNearestNeighbors(void)
                     {
-                        nn_.reset(new NN<Motion*>());
+                        nn_.reset(new NN<std::shared_ptr<Motion>>());
                     }
 
                 virtual void setup(void);
@@ -113,6 +114,7 @@ namespace ompl
 
                         ~Motion(void) 
                         {
+			    //std::cout << "delete motion: " << id_ << std::endl;
                             if(!si_)
                                 si_->freeState(state);
                         }
@@ -139,7 +141,7 @@ namespace ompl
                 void freeMemory(void);
 
                 /** \brief Compute distance between motions (actually distance between contained states) */
-                double distanceFunction(const Motion* a, const Motion* b) const
+                double distanceFunction(const std::shared_ptr<Motion> a, const std::shared_ptr<Motion> b) const
                 {
                     return si_->distance(a->state, b->state);
                 }
@@ -154,7 +156,10 @@ namespace ompl
                 const SpaceInformation                        *siC_;
 
                 /** \brief A nearest-neighbors datastructure containing the tree of motions */
-                boost::shared_ptr< NearestNeighbors<Motion*> > nn_;
+                boost::shared_ptr< NearestNeighbors<std::shared_ptr<Motion>> > nn_;
+
+		/** \brief List of Nodes */
+		std::vector<std::shared_ptr<Motion>>			       nodeslist;
 
                 /** \brief The random number generator */
                 RNG                                            rng_;
