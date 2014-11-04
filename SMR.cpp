@@ -111,14 +111,19 @@ void ompl::control::SMR::setupSMR(void)
     for(std::shared_ptr<Motion>& m : nodeslist)
     {
         setupTransitions(m.get());
+        /*
+        for(auto& a : m->t)
+            for(auto& t : a.second)
+                std::cout << m->id_ << " " << a.first << " " << t.first << " " << t.second << std::endl;
+        */
     }
     nodes_ = nodeslist.size();
     std::cout << "Build Transition Matrix" << std::endl;
 
-    double max_change = epsilon + 1;
+    double max_change = 2.0 * epsilon;
     for(int i = 0; i < nodes_ && max_change > epsilon; ++i)
     {
-        max_change = epsilon + 1;
+        max_change = 2.0 * epsilon;
         for(int j = 0; j < nodes_; ++j)
         {
             int id = nodeslist[j]->id_;
@@ -134,6 +139,7 @@ void ompl::control::SMR::setupSMR(void)
                 smrtable[id][action.first] = newsuccess;
             }
         }
+        std::cout << i << " " << max_change << std::endl;
     }
     std::cout << "Finish Value Iteration" << std::endl;
     for(auto& state : smrtable)
@@ -143,6 +149,7 @@ void ompl::control::SMR::setupSMR(void)
 
 void ompl::control::SMR::setupTransitions(Motion* m)
 {
+    const int stepsize = siC_->getMaxControlDuration();
     std::shared_ptr<Motion> newstate(new Motion(siC_, -1));
     for(int i = 0; i < actions; ++i)
     {
@@ -151,9 +158,9 @@ void ompl::control::SMR::setupTransitions(Motion* m)
 
         for(int j = 0; j < trans_; ++j)
         {
-            int steps = siC_->propagateWhileValid(m->state, control, siC_->getMinControlDuration(), newstate->state);
+            int steps = siC_->propagateWhileValid(m->state, control, stepsize, newstate->state);
             int nearest = obstacle; 
-            if(steps == siC_->getMinControlDuration())
+            if(steps == stepsize)
             { 
                 nearest = nn_->nearest(newstate)->id_;
             }
@@ -249,9 +256,10 @@ ompl::base::PlannerStatus ompl::control::SMR::solve(const base::PlannerTerminati
         control->as<DiscreteControlSpace::ControlType>()->value = action;
         result = std::unique_ptr<Motion>(new Motion(siC_, -1));
 
-        int steps = siC_->propagateWhileValid(motion->state, control, siC_->getMinControlDuration(), result->state);
+        const int stepsize = siC_->getMinControlDuration();
+        int steps = siC_->propagateWhileValid(motion->state, control, stepsize, result->state);
         solved = goal->isSatisfied(motion->state, &approxdif);
-        if(steps != siC_->getMinControlDuration())
+        if(steps != stepsize)
         {
             std::cout << "obstacle" << std::endl;
             break;
@@ -263,7 +271,7 @@ ompl::base::PlannerStatus ompl::control::SMR::solve(const base::PlannerTerminati
         }
         else
         {
-            path->append(motion->state, control, siC_->getMinControlDuration() * siC_->getPropagationStepSize());
+            path->append(motion->state, control, stepsize * siC_->getPropagationStepSize());
             motion = std::move(result);
         }
     }
