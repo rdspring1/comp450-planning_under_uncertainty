@@ -78,6 +78,8 @@ namespace ompl
 
                 virtual void setup(void);
 
+                void setupSMR(void);
+
                 /** \brief Set the number of nodes in the roadmap */
                 void setNodes(int N)
                 {
@@ -114,7 +116,7 @@ namespace ompl
 
                         ~Motion(void) 
                         {
-			    //std::cout << "delete motion: " << id_ << std::endl;
+                            //std::cout << "delete motion: " << id_ << std::endl;
                             if(!si_)
                                 si_->freeState(state);
                         }
@@ -158,14 +160,14 @@ namespace ompl
                 /** \brief A nearest-neighbors datastructure containing the tree of motions */
                 boost::shared_ptr< NearestNeighbors<std::shared_ptr<Motion>> > nn_;
 
-		/** \brief List of Nodes */
-		std::vector<std::shared_ptr<Motion>>			       nodeslist;
+                /** \brief List of Nodes */
+                std::vector<std::shared_ptr<Motion>>			       nodeslist;
 
                 /** \brief The random number generator */
                 RNG                                            rng_;
 
                 /** \brief n states in roadmap */
-                int                                            nodes_ = 10000;
+                int                                            nodes_ = 1000;
 
                 /** \brief m samples per transition */
                 int                                            trans_ = 20;
@@ -177,12 +179,13 @@ namespace ompl
                 const int                                      actions = 2;
 
                 const int                                      obstacle = 0;
-    
+
                 const double                                   alpha = 2;
 
                 /** \brief SMR DP Lookup Table - State, Action = Success Rate */
                 std::map<int, std::map<int, double>> smrtable;
-
+                
+                std::shared_ptr<Motion> startMotion;
         };
 
     }

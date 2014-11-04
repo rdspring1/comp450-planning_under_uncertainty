@@ -208,6 +208,13 @@ class CarControlSpace : public oc::DiscreteControlSpace
 };
 /// @endcond
 
+// Assume these functions are defined
+void optionalPreRunEvent(const ob::PlannerPtr &planner)
+{
+    // Build SMR before running benchmark
+    planner->as<ompl::control::SMR>()->setupSMR();
+}
+
 void plan(std::vector<Rect> obstacles, std::vector<double> startV, std::vector<double> goalV, int env, bool benchmark = false)
 {
     // x, y, theta, b
@@ -253,6 +260,7 @@ void plan(std::vector<Rect> obstacles, std::vector<double> startV, std::vector<d
         ompl::tools::Benchmark b(ss, title);
         //b.addPlanner(ompl::base::PlannerPtr(new ompl::control::RRT(ss.getSpaceInformation())));
         b.addPlanner(ompl::base::PlannerPtr(new ompl::control::SMR(ss.getSpaceInformation())));
+        b.setPreRunEvent(boost::bind(&optionalPreRunEvent, _1));
 
         ompl::tools::Benchmark::Request req;
         req.maxTime = 20.0;
@@ -270,9 +278,9 @@ void plan(std::vector<Rect> obstacles, std::vector<double> startV, std::vector<d
 
         // SMR
         ompl::base::PlannerPtr planner(new ompl::control::SMR(ss.getSpaceInformation()));
-
         ss.setPlanner(planner);
         ss.setup();
+        planner->as<ompl::control::SMR>()->setupSMR();
 
         /// attempt to solve the problem within one second of planning time
         ob::PlannerStatus solved = ss.solve(20.0);

@@ -60,7 +60,10 @@ void ompl::control::SMR::setup(void)
     if (!nn_)
         nn_.reset(tools::SelfConfig::getDefaultNearestNeighbors<std::shared_ptr<Motion>>(si_->getStateSpace()));
     nn_->setDistanceFunction(boost::bind(&SMR::distanceFunction, this, _1, _2));
+}
 
+void ompl::control::SMR::setupSMR(void)
+{
     //Create SMR
     if(!sampler_)
         sampler_ = si_->allocValidStateSampler(); 
@@ -74,14 +77,73 @@ void ompl::control::SMR::setup(void)
             m->state = si_->allocState();
         }
         nn_->add(m); 
-	nodeslist.push_back(m);
+        nodeslist.push_back(m);
+    }
+    std::cout << "Sample States" << std::endl;
+
+    // Generate Policy using SMR if new start/goal
+    base::Goal                   *goal = pdef_->getGoal().get();
+    base::GoalSampleableRegion *goal_s = dynamic_cast<base::GoalSampleableRegion*>(goal);
+
+    int startStates = 0;
+    while (const base::State *st = pis_.nextStart())
+    {
+        std::shared_ptr<Motion> motion(new Motion(siC_, nn_->size()));
+        si_->copyState(motion->state, st);
+        ++startStates;
+        nodeslist.push_back(motion);
+        nn_->add(motion);
+    }
+    startMotion = nodeslist[nodes_];
+
+    for(int i = 0; i < startStates; ++i)
+    {
+        base::State* st = si_->allocState();
+        if (goal_s && goal_s->canSample())
+            goal_s->sampleGoal(st);
+
+        std::shared_ptr<Motion> motion(new Motion(siC_, nn_->size()));
+        si_->copyState(motion->state, st);
+        nodeslist.push_back(motion);
+        nn_->add(motion);
     }
 
-    std::cout << "Finish Setup" << std::endl;
+    for(std::shared_ptr<Motion>& m : nodeslist)
+    {
+        setupTransitions(m.get());
+    }
+    nodes_ = nodeslist.size();
+    std::cout << "Build Transition Matrix" << std::endl;
+
+    double max_change = epsilon + 1;
+    for(int i = 0; i < nodes_ && max_change > epsilon; ++i)
+    {
+        max_change = epsilon + 1;
+        for(int j = 0; j < nodes_; ++j)
+        {
+            int id = nodeslist[j]->id_;
+            for(auto& action : nodeslist[j]->t)
+            {
+                double newsuccess = 0;
+                for(auto& nextstate : action.second)
+                {
+                    newsuccess += (nextstate.second * (-gamma + ps(nextstate.first, nodeslist[nextstate.first]->state, goal)));
+                }
+                double change = smrtable[id][action.first] - newsuccess;
+                max_change = std::max(max_change, change);
+                smrtable[id][action.first] = newsuccess;
+            }
+        }
+    }
+    std::cout << "Finish Value Iteration" << std::endl;
+    for(auto& state : smrtable)
+        std::cout << state.first << " " << state.second[0] << " " << state.second[1] << std::endl;
+
 }
 
 void ompl::control::SMR::setupTransitions(Motion* m)
 {
+    std::shared_ptr<Motion> newstate(new Motion(siC_, -1));
     for(int i = 0; i < actions; ++i)
     {
         Control* control = siC_->allocControl();
@@ -89,7 +151,6 @@ void ompl::control::SMR::setupTransitions(Motion* m)
 
         for(int j = 0; j < trans_; ++j)
         {
-            std::shared_ptr<Motion> newstate(new Motion(siC_, -1));
             int steps = siC_->propagateWhileValid(m->state, control, siC_->getMinControlDuration(), newstate->state);
             int nearest = obstacle; 
             if(steps == siC_->getMinControlDuration())
@@ -112,8 +173,8 @@ void ompl::control::SMR::freeMemory(void)
 {
     if(nn_)
     {
-
-
+        nn_->clear();
+        nodeslist.clear();
     }
 }
 
@@ -141,85 +202,36 @@ double ompl::control::SMR::ps(int id, base::State* state, base::Goal* goal)
 
 ompl::base::PlannerStatus ompl::control::SMR::solve(const base::PlannerTerminationCondition &ptc)
 {
-    // Generate Policy using SMR if new start/goal
     checkValidity();
-    base::Goal                   *goal = pdef_->getGoal().get();
-    base::GoalSampleableRegion *goal_s = dynamic_cast<base::GoalSampleableRegion*>(goal);
-
-    std::vector<int> startStates;
-    while (const base::State *st = pis_.nextStart())
-    {
-        std::shared_ptr<Motion> motion(new Motion(siC_, nn_->size()));
-        si_->copyState(motion->state, st);
-	startStates.push_back(nn_->size());
-        nodeslist.push_back(motion);
-        nn_->add(motion);
-    }
-
-    for(int i = 0; i < startStates.size(); ++i)
-    {
-        base::State* st = si_->allocState();
-        if (goal_s && goal_s->canSample())
-            goal_s->sampleGoal(st);
-
-        std::shared_ptr<Motion> motion(new Motion(siC_, nn_->size()));
-        si_->copyState(motion->state, st);
-	nodeslist.push_back(motion);
-        nn_->add(motion);
-    }
-
-    for(std::shared_ptr<Motion>& m : nodeslist)
-    {
-        setupTransitions(m.get());
-    }
-    nodes_ = nodeslist.size();
-
-    double max_change = epsilon + 1;
-    for(int i = 0; i < nodes_ && max_change > epsilon; ++i)
-    {
-        max_change = epsilon + 1;
-        for(int j = 0; j < nodes_; ++j)
-        {
-	    int id = nodeslist[j]->id_;
-            for(auto& action : nodeslist[j]->t)
-            {
-                double newsuccess = 0;
-                for(auto& nextstate : action.second)
-                {
-                    newsuccess += (nextstate.second * (-gamma + ps(nextstate.first, nodeslist[nextstate.first]->state, goal)));
-                }
-                double change = smrtable[id][action.first] - newsuccess;
-                max_change = std::max(max_change, change);
-                smrtable[id][action.first] = newsuccess;
-            }
-        }
-    }
-    std::cout << "Finish Value Iteration" << std::endl;
-    //for(auto& state : smrtable)
-    //    std::cout << state.first << " " << state.second[0] << " " << state.second[1] << std::endl;
 
     // Use Policy to create a path between start/goal; Return automatically if an obstacle is encountered
-    /* set the solution path */
+    base::Goal                   *goal = pdef_->getGoal().get();
     bool solved = false;
     double  approxdif = std::numeric_limits<double>::infinity();
-    std::shared_ptr<Motion> motion = nodeslist[startStates.front()];
+
+    std::shared_ptr<Motion> motion(nullptr);
+    if(startMotion)
+       motion = std::move(startMotion);
+    else
+        return base::PlannerStatus(false, false);
+         
     std::unique_ptr<Motion> result(nullptr);
     PathControl *path = new PathControl(si_);
     while(!ptc)
     {
-	/*
-        const ompl::base::CompoundState* cstate = motion->state->as<ompl::base::CompoundState>();
-        const ompl::base::RealVectorStateSpace::StateType* r2state = cstate->as<ompl::base::RealVectorStateSpace::StateType>(0);
-        const ompl::base::SO2StateSpace::StateType* so2state = cstate->as<ompl::base::SO2StateSpace::StateType>(1);
+        /*
+           const ompl::base::CompoundState* cstate = motion->state->as<ompl::base::CompoundState>();
+           const ompl::base::RealVectorStateSpace::StateType* r2state = cstate->as<ompl::base::RealVectorStateSpace::StateType>(0);
+           const ompl::base::SO2StateSpace::StateType* so2state = cstate->as<ompl::base::SO2StateSpace::StateType>(1);
 
-        double x = r2state->values[0];
-        double y = r2state->values[1];
-        double theta = so2state->value;    
+           double x = r2state->values[0];
+           double y = r2state->values[1];
+           double theta = so2state->value;    
 
-        std::cout << motion << " " <<  x << " " << y << " " << theta << std::endl;
-	*/
+           std::cout << motion << " " <<  x << " " << y << " " << theta << std::endl;
+        */
 
-	std::shared_ptr<Motion> nearest = nn_->nearest(motion);
+        std::shared_ptr<Motion> nearest = nn_->nearest(motion);
         // Select Action based on Current State
         int action = 0;
         double max_value = 0;
@@ -252,7 +264,7 @@ ompl::base::PlannerStatus ompl::control::SMR::solve(const base::PlannerTerminati
         else
         {
             path->append(motion->state, control, siC_->getMinControlDuration() * siC_->getPropagationStepSize());
-	    motion = std::move(result);
+            motion = std::move(result);
         }
     }
 
