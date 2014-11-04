@@ -88,7 +88,7 @@ void ompl::control::SMR::setupSMR(void)
     int startStates = 0;
     while (const base::State *st = pis_.nextStart())
     {
-        std::shared_ptr<Motion> motion(new Motion(siC_, nn_->size()));
+        std::shared_ptr<Motion> motion(new Motion(siC_, nn_->size()+1));
         si_->copyState(motion->state, st);
         ++startStates;
         nodeslist.push_back(motion);
@@ -102,7 +102,7 @@ void ompl::control::SMR::setupSMR(void)
         if (goal_s && goal_s->canSample())
             goal_s->sampleGoal(st);
 
-        std::shared_ptr<Motion> motion(new Motion(siC_, nn_->size()));
+        std::shared_ptr<Motion> motion(new Motion(siC_, nn_->size()+1));
         si_->copyState(motion->state, st);
         nodeslist.push_back(motion);
         nn_->add(motion);
@@ -110,7 +110,14 @@ void ompl::control::SMR::setupSMR(void)
 
     for(std::shared_ptr<Motion>& m : nodeslist)
     {
-        setupTransitions(m.get());
+        if(!goal->isSatisfied(m->state))
+        {
+            setupTransitions(m.get());
+        }
+        else
+        {
+            m->goal = true;
+        }
         /*
         for(auto& a : m->t)
             for(auto& t : a.second)
@@ -123,7 +130,7 @@ void ompl::control::SMR::setupSMR(void)
     double max_change = 2.0 * epsilon;
     for(int i = 0; i < nodes_ && max_change > epsilon; ++i)
     {
-        max_change = 2.0 * epsilon;
+        max_change = epsilon;
         for(int j = 0; j < nodes_; ++j)
         {
             int id = nodeslist[j]->id_;
@@ -132,19 +139,41 @@ void ompl::control::SMR::setupSMR(void)
                 double newsuccess = 0;
                 for(auto& nextstate : action.second)
                 {
-                    newsuccess += (nextstate.second * (-gamma + ps(nextstate.first, nodeslist[nextstate.first]->state, goal)));
+                    newsuccess += (nextstate.second * (-gamma + ps(nextstate.first, nodeslist[nextstate.first-1]->goal)));
                 }
-                double change = smrtable[id][action.first] - newsuccess;
+                double change = std::abs(smrtable[id][action.first] - newsuccess);
                 max_change = std::max(max_change, change);
-                smrtable[id][action.first] = newsuccess;
+                future_smrtable[id][action.first] = newsuccess;
             }
         }
         std::cout << i << " " << max_change << std::endl;
+        smrtable.swap(future_smrtable);
+        future_smrtable.clear();
     }
     std::cout << "Finish Value Iteration" << std::endl;
-    for(auto& state : smrtable)
-        std::cout << state.first << " " << state.second[0] << " " << state.second[1] << std::endl;
+    //for(auto& state : smrtable)
+    //    std::cout << state.first << " " << state.second[0] << " " << state.second[1] << std::endl;
+}
 
+double ompl::control::SMR::ps(int id, bool goal)
+{
+    if(id == obstacle)
+    {
+        return 0;
+    }
+    else if(goal)
+    {
+        return 1;
+    }
+    else
+    {
+        double max_value = 0;
+        for(auto& value : smrtable[id])
+        {
+            max_value = std::max(max_value, value.second);
+        }
+        return max_value;
+    }
 }
 
 void ompl::control::SMR::setupTransitions(Motion* m)
@@ -182,28 +211,6 @@ void ompl::control::SMR::freeMemory(void)
     {
         nn_->clear();
         nodeslist.clear();
-    }
-}
-
-double ompl::control::SMR::ps(int id, base::State* state, base::Goal* goal)
-{
-    if(id == obstacle)
-    {
-        return 0;
-    }
-    else if(goal->isSatisfied(state))
-    {
-        //std::cout << "goal: " << id << std::endl;
-        return 1;
-    }
-    else
-    {
-        double max_value = 0;
-        for(auto& value : smrtable[id])
-        {
-            max_value = std::max(max_value, value.second);
-        }
-        return max_value;
     }
 }
 

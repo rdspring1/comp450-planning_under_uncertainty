@@ -109,10 +109,10 @@ namespace ompl
                 {
                     public:
 
-                        Motion(void) : state(NULL), id_(0) {}
+                        Motion(void) : si_(NULL), state(NULL), id_(0), goal(false) {}
 
                         /** \brief Constructor that allocates memory for the state */
-                        Motion(const SpaceInformation *si, int id) : si_(si), state(si->allocState()), id_(id) {}
+                        Motion(const SpaceInformation *si, int id) : si_(si), state(si->allocState()), id_(id), goal(false) {}
 
                         ~Motion(void) 
                         {
@@ -131,13 +131,15 @@ namespace ompl
                         int id_;
 
                         const SpaceInformation* si_;
+
+                        bool goal;
                 };
 
                 /** \brief Setup Transition Probabilities */
                 void setupTransitions(Motion* m);
 
                 /** \brief Probability of Success for state i */
-                double ps(int id, base::State* state, base::Goal* goal);
+                double ps(int id, bool goal);
 
                 /** \brief Free the memory allocated by this planner */
                 void freeMemory(void);
@@ -167,7 +169,7 @@ namespace ompl
                 RNG                                            rng_;
 
                 /** \brief n states in roadmap */
-                int                                            nodes_ = 1000;
+                int                                            nodes_ = 50000;
 
                 /** \brief m samples per transition */
                 int                                            trans_ = 20;
@@ -185,6 +187,8 @@ namespace ompl
                 /** \brief SMR DP Lookup Table - State, Action = Success Rate */
                 std::map<int, std::map<int, double>> smrtable;
                 
+                std::map<int, std::map<int, double>> future_smrtable;
+
                 std::shared_ptr<Motion> startMotion;
         };
 
