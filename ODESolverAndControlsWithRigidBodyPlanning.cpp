@@ -208,13 +208,6 @@ class CarControlSpace : public oc::DiscreteControlSpace
 };
 /// @endcond
 
-// Assume these functions are defined
-void optionalPreRunEvent(const ob::PlannerPtr &planner)
-{
-    // Build SMR before running benchmark
-    planner->as<ompl::control::SMR>()->setupSMR();
-}
-
 void plan(std::vector<Rect> obstacles, std::vector<double> startV, std::vector<double> goalV, int env, bool benchmark = false)
 {
     // x, y, theta, b
@@ -256,16 +249,19 @@ void plan(std::vector<Rect> obstacles, std::vector<double> startV, std::vector<d
     if(benchmark)
     {
         // Benchmark Code - Project 5
-        std::string title = "benchmark" + env;
+        std::string title = "benchmark";
         ompl::tools::Benchmark b(ss, title);
         //b.addPlanner(ompl::base::PlannerPtr(new ompl::control::RRT(ss.getSpaceInformation())));
-        b.addPlanner(ompl::base::PlannerPtr(new ompl::control::SMR(ss.getSpaceInformation())));
-        b.setPreRunEvent(boost::bind(&optionalPreRunEvent, _1));
+        ompl::base::PlannerPtr planner(new ompl::control::SMR(ss.getSpaceInformation()));
+        ss.setPlanner(planner);
+        ss.setup();
+        planner->as<ompl::control::SMR>()->setupSMR();
+        b.addPlanner(ompl::base::PlannerPtr(planner));
 
         ompl::tools::Benchmark::Request req;
         req.maxTime = 20.0;
         req.maxMem = 1000.0;
-        req.runCount = 20;
+        req.runCount = 100;
         req.displayProgress = true;
         b.benchmark(req);
         std::string logfile = title + ".log";

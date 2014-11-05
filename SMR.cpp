@@ -146,13 +146,13 @@ void ompl::control::SMR::setupSMR(void)
                 future_smrtable[id][action.first] = newsuccess;
             }
         }
-        std::cout << i << " " << max_change << std::endl;
+        //std::cout << i << " " << max_change << std::endl;
         smrtable.swap(future_smrtable);
         future_smrtable.clear();
     }
     std::cout << "Finish Value Iteration" << std::endl;
-    //for(auto& state : smrtable)
-    //    std::cout << state.first << " " << state.second[0] << " " << state.second[1] << std::endl;
+    for(auto& state : smrtable)
+        std::cout << state.first << " " << state.second[0] << " " << state.second[1] << std::endl;
 }
 
 double ompl::control::SMR::ps(int id)
@@ -202,7 +202,6 @@ void ompl::control::SMR::clear(void)
 {
     Planner::clear();
     sampler_.reset();
-    freeMemory();
 }
 
 void ompl::control::SMR::freeMemory(void)
@@ -225,9 +224,14 @@ ompl::base::PlannerStatus ompl::control::SMR::solve(const base::PlannerTerminati
 
     std::shared_ptr<Motion> motion(nullptr);
     if(startMotion)
-       motion = std::move(startMotion);
+    {
+       motion = startMotion;
+	}
     else
+	{
+		std::cout << "No Solve" << std::endl;
         return base::PlannerStatus(false, false);
+	}
          
     std::unique_ptr<Motion> result(nullptr);
     PathControl *path = new PathControl(si_);
@@ -268,12 +272,12 @@ ompl::base::PlannerStatus ompl::control::SMR::solve(const base::PlannerTerminati
         solved = goal->isSatisfied(motion->state, &approxdif);
         if(steps != stepsize)
         {
-            std::cout << "obstacle" << std::endl;
+            //std::cout << "obstacle" << std::endl;
             break;
         }
         else if(solved)
         {
-            std::cout << "goal" << std::endl;
+            //std::cout << "goal" << std::endl;
             break;
         }
         else
