@@ -139,7 +139,7 @@ void ompl::control::SMR::setupSMR(void)
                 double newsuccess = 0;
                 for(auto& nextstate : action.second)
                 {
-                    newsuccess += (nextstate.second * (-gamma + ps(nextstate.first, nodeslist[nextstate.first-1]->goal)));
+                    newsuccess += (nextstate.second * (-gamma + ps(nextstate.first)));
                 }
                 double change = std::abs(smrtable[id][action.first] - newsuccess);
                 max_change = std::max(max_change, change);
@@ -155,13 +155,13 @@ void ompl::control::SMR::setupSMR(void)
     //    std::cout << state.first << " " << state.second[0] << " " << state.second[1] << std::endl;
 }
 
-double ompl::control::SMR::ps(int id, bool goal)
+double ompl::control::SMR::ps(int id)
 {
     if(id == obstacle)
     {
         return 0;
     }
-    else if(goal)
+    else if(nodeslist[id-1]->goal)
     {
         return 1;
     }

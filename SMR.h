@@ -139,7 +139,7 @@ namespace ompl
                 void setupTransitions(Motion* m);
 
                 /** \brief Probability of Success for state i */
-                double ps(int id, bool goal);
+                double ps(int id);
 
                 /** \brief Free the memory allocated by this planner */
                 void freeMemory(void);
@@ -169,7 +169,7 @@ namespace ompl
                 RNG                                            rng_;
 
                 /** \brief n states in roadmap */
-                int                                            nodes_ = 50000;
+                int                                            nodes_ = 10000;
 
                 /** \brief m samples per transition */
                 int                                            trans_ = 20;
