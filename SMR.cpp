@@ -40,6 +40,7 @@
 #include "ompl/control/spaces/DiscreteControlSpace.h"
 #include <limits>
 #include <math.h>
+#include <assert.h>
 
 #include <ompl/base/spaces/SO2StateSpace.h>
 #include <ompl/base/spaces/RealVectorStateSpace.h>
@@ -76,6 +77,17 @@ void ompl::control::SMR::setupSMR(void)
             si_->freeState(m->state);
             m->state = si_->allocState();
         }
+		/*
+           const ompl::base::CompoundState* cstate = m->state->as<ompl::base::CompoundState>();
+           const ompl::base::RealVectorStateSpace::StateType* r2state = cstate->as<ompl::base::RealVectorStateSpace::StateType>(0);
+           const ompl::base::SO2StateSpace::StateType* so2state = cstate->as<ompl::base::SO2StateSpace::StateType>(1);
+
+           double x = r2state->values[0];
+           double y = r2state->values[1];
+           double theta = so2state->value;    
+
+           std::cout << x << " " << y << " " << theta << std::endl;
+		*/
         nn_->add(m); 
         nodeslist.push_back(m);
     }
@@ -118,11 +130,31 @@ void ompl::control::SMR::setupSMR(void)
         {
             m->goal = true;
         }
-        /*
+	}
+    for(std::shared_ptr<Motion>& m : nodeslist)
+	{
         for(auto& a : m->t)
+		{
+			double sum = 0;
             for(auto& t : a.second)
-                std::cout << m->id_ << " " << a.first << " " << t.first << " " << t.second << std::endl;
-        */
+			{
+				if(nodeslist[t.first-1]->goal)
+				{
+					const ompl::base::CompoundState* cstate = m->state->as<ompl::base::CompoundState>();
+					const ompl::base::RealVectorStateSpace::StateType* r2state = cstate->as<ompl::base::RealVectorStateSpace::StateType>(0);
+					const ompl::base::SO2StateSpace::StateType* so2state = cstate->as<ompl::base::SO2StateSpace::StateType>(1);
+
+					double x = r2state->values[0];
+					double y = r2state->values[1];
+					double theta = so2state->value;    
+
+					std::cout << m->id_ << " " << x << " " << y << " " << theta << std::endl;
+				}
+				//std::cout << a.first << " " << t.first << " " << t.second << std::endl;
+                sum += t.second;
+			}
+			assert(sum > 0.98 && sum < 1.02);
+		}
     }
     nodes_ = nodeslist.size();
     std::cout << "Build Transition Matrix" << std::endl;
@@ -178,7 +210,7 @@ double ompl::control::SMR::ps(int id)
 
 void ompl::control::SMR::setupTransitions(Motion* m)
 {
-    const int stepsize = siC_->getMaxControlDuration();
+    const int stepsize = siC_->getMaxControlDuration() / 2.0;
     std::shared_ptr<Motion> newstate(new Motion(siC_, -1));
     for(int i = 0; i < actions; ++i)
     {
@@ -229,7 +261,6 @@ ompl::base::PlannerStatus ompl::control::SMR::solve(const base::PlannerTerminati
 	}
     else
 	{
-		std::cout << "No Solve" << std::endl;
         return base::PlannerStatus(false, false);
 	}
          
@@ -237,18 +268,6 @@ ompl::base::PlannerStatus ompl::control::SMR::solve(const base::PlannerTerminati
     PathControl *path = new PathControl(si_);
     while(!ptc)
     {
-        /*
-           const ompl::base::CompoundState* cstate = motion->state->as<ompl::base::CompoundState>();
-           const ompl::base::RealVectorStateSpace::StateType* r2state = cstate->as<ompl::base::RealVectorStateSpace::StateType>(0);
-           const ompl::base::SO2StateSpace::StateType* so2state = cstate->as<ompl::base::SO2StateSpace::StateType>(1);
-
-           double x = r2state->values[0];
-           double y = r2state->values[1];
-           double theta = so2state->value;    
-
-           std::cout << motion << " " <<  x << " " << y << " " << theta << std::endl;
-        */
-
         std::shared_ptr<Motion> nearest = nn_->nearest(motion);
         // Select Action based on Current State
         int action = 0;
