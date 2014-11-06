@@ -77,7 +77,7 @@ void ompl::control::SMR::setupSMR(void)
             si_->freeState(m->state);
             m->state = si_->allocState();
         }
-		/*
+        /*
            const ompl::base::CompoundState* cstate = m->state->as<ompl::base::CompoundState>();
            const ompl::base::RealVectorStateSpace::StateType* r2state = cstate->as<ompl::base::RealVectorStateSpace::StateType>(0);
            const ompl::base::SO2StateSpace::StateType* so2state = cstate->as<ompl::base::SO2StateSpace::StateType>(1);
@@ -87,7 +87,7 @@ void ompl::control::SMR::setupSMR(void)
            double theta = so2state->value;    
 
            std::cout << x << " " << y << " " << theta << std::endl;
-		*/
+         */
         nn_->add(m); 
         nodeslist.push_back(m);
     }
@@ -130,32 +130,8 @@ void ompl::control::SMR::setupSMR(void)
         {
             m->goal = true;
         }
-	}
-    for(std::shared_ptr<Motion>& m : nodeslist)
-	{
-        for(auto& a : m->t)
-		{
-			double sum = 0;
-            for(auto& t : a.second)
-			{
-				if(nodeslist[t.first-1]->goal)
-				{
-					const ompl::base::CompoundState* cstate = m->state->as<ompl::base::CompoundState>();
-					const ompl::base::RealVectorStateSpace::StateType* r2state = cstate->as<ompl::base::RealVectorStateSpace::StateType>(0);
-					const ompl::base::SO2StateSpace::StateType* so2state = cstate->as<ompl::base::SO2StateSpace::StateType>(1);
-
-					double x = r2state->values[0];
-					double y = r2state->values[1];
-					double theta = so2state->value;    
-
-					std::cout << m->id_ << " " << x << " " << y << " " << theta << std::endl;
-				}
-				//std::cout << a.first << " " << t.first << " " << t.second << std::endl;
-                sum += t.second;
-			}
-			assert(sum > 0.98 && sum < 1.02);
-		}
     }
+
     nodes_ = nodeslist.size();
     std::cout << "Build Transition Matrix" << std::endl;
 
@@ -183,8 +159,8 @@ void ompl::control::SMR::setupSMR(void)
         future_smrtable.clear();
     }
     std::cout << "Finish Value Iteration" << std::endl;
-    for(auto& state : smrtable)
-        std::cout << state.first << " " << state.second[0] << " " << state.second[1] << std::endl;
+    //for(auto& state : smrtable)
+    //    std::cout << state.first << " " << state.second[0] << " " << state.second[1] << std::endl;
 }
 
 double ompl::control::SMR::ps(int id)
@@ -257,15 +233,16 @@ ompl::base::PlannerStatus ompl::control::SMR::solve(const base::PlannerTerminati
     std::shared_ptr<Motion> motion(nullptr);
     if(startMotion)
     {
-       motion = startMotion;
-	}
+        motion = startMotion;
+    }
     else
-	{
+    {
         return base::PlannerStatus(false, false);
-	}
-         
+    }
+
     std::unique_ptr<Motion> result(nullptr);
     PathControl *path = new PathControl(si_);
+    bool valid = true;
     while(!ptc)
     {
         std::shared_ptr<Motion> nearest = nn_->nearest(motion);
@@ -281,22 +258,35 @@ ompl::base::PlannerStatus ompl::control::SMR::solve(const base::PlannerTerminati
             }
         }
 
+        /*
+        const ompl::base::CompoundState* cstate = motion->state->as<ompl::base::CompoundState>();
+        const ompl::base::RealVectorStateSpace::StateType* r2state = cstate->as<ompl::base::RealVectorStateSpace::StateType>(0);
+        const ompl::base::SO2StateSpace::StateType* so2state = cstate->as<ompl::base::SO2StateSpace::StateType>(1);
+
+        double x = r2state->values[0];
+        double y = r2state->values[1];
+        double theta = so2state->value;    
+
+        std::cout << motion->id_ << " " << x << " " << y << " " << theta << std::endl;
+        */
+
         // Propagate (CurrentState, Action, Steps, NextState)
         Control* control = siC_->allocControl();
         control->as<DiscreteControlSpace::ControlType>()->value = action;
         result = std::unique_ptr<Motion>(new Motion(siC_, -1));
 
-        const int stepsize = siC_->getMinControlDuration();
+        const int stepsize = siC_->getMaxControlDuration() / 2;
         int steps = siC_->propagateWhileValid(motion->state, control, stepsize, result->state);
         solved = goal->isSatisfied(motion->state, &approxdif);
         if(steps != stepsize)
         {
-            //std::cout << "obstacle" << std::endl;
+            std::cout << "obstacle" << std::endl;
+            valid = false;
             break;
         }
         else if(solved)
         {
-            //std::cout << "goal" << std::endl;
+            std::cout << "goal" << std::endl;
             break;
         }
         else
