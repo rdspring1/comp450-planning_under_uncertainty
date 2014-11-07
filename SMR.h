@@ -171,7 +171,7 @@ namespace ompl
                 RNG                                            rng_;
 
                 /** \brief n states in roadmap */
-                int                                            nodes_ = 50000;
+                int                                            nodes_ = 1000;
 
                 /** \brief m samples per transition */
                 int                                            trans_ = 1;
