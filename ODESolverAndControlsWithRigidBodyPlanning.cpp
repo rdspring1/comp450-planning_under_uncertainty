@@ -30,7 +30,6 @@ const std::string endStr = "end";
 const std::string endPolygon = "ep";
 
 const double epsilon = 0.01;
-//const double square = 0.25;
 const double square = 0.025;
 
 // Car Limits
@@ -122,37 +121,6 @@ void TestCarODE (const oc::ODESolver::StateType& q, const oc::Control* control, 
     qdot[1] = u[1];
 }
 
-// Definition of the ODE for the kinematic car.
-void KinematicCarODE (const oc::ODESolver::StateType& q, const oc::Control* control, oc::ODESolver::StateType& qdot)
-{
-    const int u = control->as<oc::DiscreteControlSpace::ControlType>()->value;
-    double sign = bool(std::floor(u)) ? 1.0 : -1.0;
-
-    ompl::RNG sample;
-    const double Delta = sample.gaussian(delta, delta_sd[u]);
-    const double Radius = sample.gaussian(radius, radius_sd[u]);
-
-    // Zero out qdot
-    qdot.resize (q.size(), 0);
-    qdot[0] = Delta * cos(q[2]);
-    qdot[1] = Delta * sin(q[2]);
-    qdot[2] = sign * Delta / Radius;
-}
-
-// This is a callback method invoked after numerical integration.
-void CarPostIntegration (const ob::State* state, const oc::Control* control, const double duration, ob::State *result)
-{
-    const int u = control->as<oc::DiscreteControlSpace::ControlType>()->value;
-    ompl::base::CompoundState* cstate = result->as<ompl::base::CompoundState>();
-    ompl::base::SO2StateSpace::StateType* so2state = cstate->as<ompl::base::SO2StateSpace::StateType>(1);
-    ompl::base::DiscreteStateSpace::StateType* dstate = cstate->as<ompl::base::DiscreteStateSpace::StateType>(2);
-    dstate->value = u;
-
-    // Normalize orientation between -pi and pi
-    ob::SO2StateSpace SO2;
-    SO2.enforceBounds (so2state);
-}
-
 bool isStateValidCar(const ob::State *state, const double minBound, const double maxBound, const std::vector<Rect> obstacles)
 {
     const ompl::base::CompoundState* cstate = state->as<ompl::base::CompoundState>();
@@ -211,12 +179,6 @@ bool isStateValidCar(const ob::State *state, const double minBound, const double
 }
 
 /// @cond IGNORE
-// turning angle - left=0 or right=1
-class CarControlSpace : public oc::DiscreteControlSpace
-{
-    public:
-        CarControlSpace(const ob::StateSpacePtr &stateSpace) : oc::DiscreteControlSpace(stateSpace, 0, 1) {}
-};
 // x, y position
 class TestCarControlSpace : public oc::RealVectorControlSpace
 {
@@ -233,8 +195,6 @@ void plan(std::vector<Rect> obstacles, std::vector<double> startV, std::vector<d
     r2->as<ompl::base::RealVectorStateSpace>()->setBounds(0.0, 1.0);
     ompl::base::StateSpacePtr so2(new ompl::base::SO2StateSpace());
 	space = r2 + so2;
-    //ompl::base::StateSpacePtr d(new ompl::base::DiscreteStateSpace(0, 1));
-    //space = r2 + so2 + d;
 
     // Create a control space
     //oc::ControlSpacePtr cspace(new CarControlSpace(space));
@@ -257,7 +217,7 @@ void plan(std::vector<Rect> obstacles, std::vector<double> startV, std::vector<d
     // Use the ODESolver to propagate the system.  Call KinematicCarPostIntegration
     // when integration has finished to normalize the orientation values.
     oc::ODESolverPtr odeSolver(new oc::ODEBasicSolver<> (ss.getSpaceInformation(), &TestCarODE));
-    ss.setStatePropagator(oc::ODESolver::getStatePropagator(odeSolver/*, CarPostIntegration*/));
+    ss.setStatePropagator(oc::ODESolver::getStatePropagator(odeSolver));
     ss.getSpaceInformation()->setPropagationStepSize(0.10);
 
     /// create a start state

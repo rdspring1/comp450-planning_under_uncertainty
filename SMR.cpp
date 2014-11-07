@@ -122,20 +122,6 @@ void ompl::control::SMR::setupSMR(void)
 		}
 	}
 	nodes_ = nodeslist.size();
-
-	for(std::shared_ptr<Motion>& m : nodeslist)
-	{
-		for(auto& action : m->t)
-		{
-			for(auto& t : action.second)
-			{
-				if(ps(t.first) == 1)
-				{
-					std::cout << m->id_ << " " << action.first << " " << t.first << " "  << t.second << std::endl;
-				}
-			}
-		}
-	}
 	std::cout << "Build Transition Matrix" << std::endl;
 
 	double max_change = 2.0 * epsilon;
@@ -162,8 +148,8 @@ void ompl::control::SMR::setupSMR(void)
 		future_smrtable.clear();
 	}
 	std::cout << "Finish Value Iteration" << std::endl;
-	for(int i = 0; i <= nodes_; ++i)
-		std::cout << i << " " << ps(i) << std::endl;
+	//for(int i = 0; i <= nodes_; ++i)
+	//	std::cout << i << " " << ps(i) << std::endl;
 }
 
 double ompl::control::SMR::ps(int id)
@@ -190,26 +176,7 @@ double ompl::control::SMR::ps(int id)
 void ompl::control::SMR::setupTransitions(Motion* m)
 {
 	const int stepsize = siC_->getMinControlDuration();
-	/*
-	for(int i = 0; i < actions; ++i)
-	{
-		Control* control = siC_->allocControl();
-		control->as<DiscreteControlSpace::ControlType>()->value = i;
-
-		for(int j = 0; j < trans_; ++j)
-		{
-			int steps = siC_->propagateWhileValid(m->state, control, stepsize, newstate->state);
-			int nearest = obstacle; 
-			if(steps == stepsize)
-			{ 
-				nearest = nn_->nearest(newstate)->id_;
-			}
-			m->t[i][nearest] += (1.0/trans_); 
-		}
-	}
-	*/
-
-	for(int t = 0; t < 3; ++t)
+	for(int t = 0; t < 4; ++t)
 	{
 		std::shared_ptr<Motion> newstate(new Motion(siC_, -1));
 		Control* control = siC_->allocControl();
@@ -218,7 +185,12 @@ void ompl::control::SMR::setupTransitions(Motion* m)
 			control->as<RealVectorControlSpace::ControlType>()->values[0] = 0.0;
 			control->as<RealVectorControlSpace::ControlType>()->values[1] = 0.5;
 		}
-		else if(t == 1)
+        else if(t == 1)
+        {
+			control->as<RealVectorControlSpace::ControlType>()->values[0] = 0.0;
+			control->as<RealVectorControlSpace::ControlType>()->values[1] = -0.5;
+        }
+		else if(t == 2)
 		{
 			control->as<RealVectorControlSpace::ControlType>()->values[0] = 0.5;
 			control->as<RealVectorControlSpace::ControlType>()->values[1] = 0.0;
@@ -308,13 +280,17 @@ ompl::base::PlannerStatus ompl::control::SMR::solve(const base::PlannerTerminati
 
 		// Propagate (CurrentState, Action, Steps, NextState)
 		Control* control = siC_->allocControl();
-		//control->as<DiscreteControlSpace::ControlType>()->value = action;
 		if(action == 0)
 		{
 			control->as<RealVectorControlSpace::ControlType>()->values[0] = 0.0;
 			control->as<RealVectorControlSpace::ControlType>()->values[1] = 0.5;
 		}
-		else if(action == 1)
+        else if(action == 1)
+        {
+			control->as<RealVectorControlSpace::ControlType>()->values[0] = 0.0;
+			control->as<RealVectorControlSpace::ControlType>()->values[1] = -0.5;
+        }
+		else if(action == 2)
 		{
 			control->as<RealVectorControlSpace::ControlType>()->values[0] = 0.5;
 			control->as<RealVectorControlSpace::ControlType>()->values[1] = 0.0;
