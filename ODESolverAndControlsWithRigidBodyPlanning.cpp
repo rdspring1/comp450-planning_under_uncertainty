@@ -3,6 +3,7 @@
 #include <ompl/base/spaces/SO2StateSpace.h>
 #include <ompl/base/spaces/RealVectorStateSpace.h>
 #include <ompl/base/spaces/DiscreteStateSpace.h>
+#include <ompl/control/spaces/RealVectorControlSpace.h>
 #include <ompl/control/spaces/DiscreteControlSpace.h>
 #include <ompl/control/ODESolver.h>
 #include <ompl/control/SimpleSetup.h>
@@ -29,7 +30,8 @@ const std::string endStr = "end";
 const std::string endPolygon = "ep";
 
 const double epsilon = 0.01;
-const double square = 0.25;
+//const double square = 0.25;
+const double square = 0.025;
 
 // Car Limits
 const double turning_radius = M_PI / 3;
@@ -108,6 +110,16 @@ bool lineIntersection(Point2D ours0, Point2D ours1, Point2D theirs0, Point2D the
         }
     }
     return false;
+}
+
+// Definition of the ODE for the kinematic car.
+void TestCarODE (const oc::ODESolver::StateType& q, const oc::Control* control, oc::ODESolver::StateType& qdot)
+{
+    const double *u = control->as<oc::RealVectorControlSpace::ControlType>()->values;
+    // Zero out qdot
+    qdot.resize (q.size (), 0);
+    qdot[0] = u[0];
+    qdot[1] = u[1];
 }
 
 // Definition of the ODE for the kinematic car.
@@ -195,7 +207,6 @@ bool isStateValidCar(const ob::State *state, const double minBound, const double
             }
         }
     }
-
     return true;
 }
 
@@ -206,6 +217,12 @@ class CarControlSpace : public oc::DiscreteControlSpace
     public:
         CarControlSpace(const ob::StateSpacePtr &stateSpace) : oc::DiscreteControlSpace(stateSpace, 0, 1) {}
 };
+// x, y position
+class TestCarControlSpace : public oc::RealVectorControlSpace
+{
+    public:
+        TestCarControlSpace(const ob::StateSpacePtr &stateSpace) : oc::RealVectorControlSpace(stateSpace, 2) {}
+};
 /// @endcond
 
 void plan(std::vector<Rect> obstacles, std::vector<double> startV, std::vector<double> goalV, int env, bool benchmark = false)
@@ -213,25 +230,35 @@ void plan(std::vector<Rect> obstacles, std::vector<double> startV, std::vector<d
     // x, y, theta, b
     ompl::base::StateSpacePtr space;
     ompl::base::StateSpacePtr r2(new ompl::base::RealVectorStateSpace(2));
-    r2->as<ompl::base::RealVectorStateSpace>()->setBounds(0.0, 10.0);
+    r2->as<ompl::base::RealVectorStateSpace>()->setBounds(0.0, 1.0);
     ompl::base::StateSpacePtr so2(new ompl::base::SO2StateSpace());
-    ompl::base::StateSpacePtr d(new ompl::base::DiscreteStateSpace(0, 1));
-    space = r2 + so2 + d;
+	space = r2 + so2;
+    //ompl::base::StateSpacePtr d(new ompl::base::DiscreteStateSpace(0, 1));
+    //space = r2 + so2 + d;
 
     // Create a control space
-    oc::ControlSpacePtr cspace(new CarControlSpace(space));
+    //oc::ControlSpacePtr cspace(new CarControlSpace(space));
+    oc::ControlSpacePtr cspace(new TestCarControlSpace(space));
+
+    // set the bounds for the control space
+    ob::RealVectorBounds cbounds(2);
+    cbounds.setLow(0, -0.5);
+    cbounds.setHigh(0, 0.5);
+    cbounds.setLow(1, -0.5);
+    cbounds.setHigh(1, 0.5);
+    cspace->as<TestCarControlSpace>()->setBounds(cbounds);
 
     // define a simple setup class
     oc::SimpleSetup ss(cspace);
 
     // set state validity checking for this space
-    ss.setStateValidityChecker(boost::bind(isStateValidCar, _1, 0.0, 10.0, obstacles));
+    ss.setStateValidityChecker(boost::bind(isStateValidCar, _1, 0.0, 1.0, obstacles));
 
     // Use the ODESolver to propagate the system.  Call KinematicCarPostIntegration
     // when integration has finished to normalize the orientation values.
-    oc::ODESolverPtr odeSolver(new oc::ODEBasicSolver<> (ss.getSpaceInformation(), &KinematicCarODE));
-    ss.setStatePropagator(oc::ODESolver::getStatePropagator(odeSolver, CarPostIntegration));
-    ss.getSpaceInformation()->setPropagationStepSize(0.08);
+    oc::ODESolverPtr odeSolver(new oc::ODEBasicSolver<> (ss.getSpaceInformation(), &TestCarODE));
+    ss.setStatePropagator(oc::ODESolver::getStatePropagator(odeSolver/*, CarPostIntegration*/));
+    ss.getSpaceInformation()->setPropagationStepSize(0.10);
 
     /// create a start state
     ob::ScopedState<> start(space);
