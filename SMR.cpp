@@ -229,6 +229,21 @@ void ompl::control::SMR::freeMemory(void)
 	}
 }
 
+bool ompl::control::SMR::loopfree(int action, int state, int prev_state)
+{
+    if(prev_state == -1)
+        return true;
+
+    for(const auto& nextstate : nodeslist[state-1]->t[action])
+    {
+        if(nextstate.first == prev_state && nextstate.second > threshold)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 ompl::base::PlannerStatus ompl::control::SMR::solve(const base::PlannerTerminationCondition &ptc)
 {
 	checkValidity();
@@ -250,17 +265,18 @@ ompl::base::PlannerStatus ompl::control::SMR::solve(const base::PlannerTerminati
 
 	std::unique_ptr<Motion> result(nullptr);
 	PathControl *path = new PathControl(si_);
+    int prev_state = -1;
 	bool valid = true;
 	const int stepsize = siC_->getMinControlDuration();
 	while(!ptc)
 	{
 		std::shared_ptr<Motion> nearest = nn_->nearest(motion);
 		// Select Action based on Current State
-		int action = 0;
+		int action = -1;
 		double max_value = 0;
 		for(auto& value : smrtable[nearest->id_])
 		{
-			if(value.second > max_value)
+			if(loopfree(value.first, nearest->id_, prev_state) && value.second > max_value)
 			{
 				max_value = value.second;
 				action = value.first;
@@ -318,6 +334,7 @@ ompl::base::PlannerStatus ompl::control::SMR::solve(const base::PlannerTerminati
 		else
 		{
 			path->append(motion->state, control, stepsize * siC_->getPropagationStepSize());
+            prev_state = nearest->id_;
 			motion = std::move(result);
 		}
 	}

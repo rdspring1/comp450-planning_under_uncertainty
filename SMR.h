@@ -144,6 +144,8 @@ namespace ompl
                 /** \brief Free the memory allocated by this planner */
                 void freeMemory(void);
 
+                bool loopfree(int action, int state, int prev_state);
+
                 /** \brief Compute distance between motions (actually distance between contained states) */
                 double distanceFunction(const std::shared_ptr<Motion> a, const std::shared_ptr<Motion> b) const
                 {
@@ -183,6 +185,8 @@ namespace ompl
                 const int                                      obstacle = 0;
 
                 const double                                   alpha = 2;
+
+                const double                                   threshold = 0.5;
 
                 /** \brief SMR DP Lookup Table - State, Action = Success Rate */
                 std::map<int, std::map<int, double>> smrtable;
