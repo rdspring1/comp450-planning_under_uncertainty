@@ -29,7 +29,7 @@ const std::string endStr = "end";
 const std::string endPolygon = "ep";
 
 const double epsilon = 0.01;
-const double square = 0.25;
+const double square = 0.025;
 
 // Car Limits
 const double turning_radius = M_PI / 3;
@@ -213,7 +213,7 @@ void plan(std::vector<Rect> obstacles, std::vector<double> startV, std::vector<d
     // x, y, theta, b
     ompl::base::StateSpacePtr space;
     ompl::base::StateSpacePtr r2(new ompl::base::RealVectorStateSpace(2));
-    r2->as<ompl::base::RealVectorStateSpace>()->setBounds(0.0, 10.0);
+    r2->as<ompl::base::RealVectorStateSpace>()->setBounds(0.0, 1.0);
     ompl::base::StateSpacePtr so2(new ompl::base::SO2StateSpace());
     ompl::base::StateSpacePtr d(new ompl::base::DiscreteStateSpace(0, 1));
     space = r2 + so2 + d;
@@ -225,13 +225,13 @@ void plan(std::vector<Rect> obstacles, std::vector<double> startV, std::vector<d
     oc::SimpleSetup ss(cspace);
 
     // set state validity checking for this space
-    ss.setStateValidityChecker(boost::bind(isStateValidCar, _1, 0.0, 10.0, obstacles));
+    ss.setStateValidityChecker(boost::bind(isStateValidCar, _1, 0.0, 1.0, obstacles));
 
     // Use the ODESolver to propagate the system.  Call KinematicCarPostIntegration
     // when integration has finished to normalize the orientation values.
     oc::ODESolverPtr odeSolver(new oc::ODEBasicSolver<> (ss.getSpaceInformation(), &KinematicCarODE));
     ss.setStatePropagator(oc::ODESolver::getStatePropagator(odeSolver, CarPostIntegration));
-    ss.getSpaceInformation()->setPropagationStepSize(0.08);
+    ss.getSpaceInformation()->setPropagationStepSize(0.10);
 
     /// create a start state
     ob::ScopedState<> start(space);

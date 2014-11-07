@@ -169,14 +169,14 @@ namespace ompl
                 RNG                                            rng_;
 
                 /** \brief n states in roadmap */
-                int                                            nodes_ = 10000;
+                int                                            nodes_ = 50000;
 
                 /** \brief m samples per transition */
                 int                                            trans_ = 20;
 
                 const double                                   epsilon = 0.0000001;
 
-                const double                                   gamma = 0.0;
+                const double                                   gamma = 0.00001;
 
                 const int                                      actions = 2;
 

@@ -131,8 +131,20 @@ void ompl::control::SMR::setupSMR(void)
             m->goal = true;
         }
     }
-
     nodes_ = nodeslist.size();
+	for(std::shared_ptr<Motion>& m : nodeslist)
+	{
+		for(auto& action : m->t)
+		{
+			for(auto& t : action.second)
+			{
+				if(ps(t.first) == 1)
+				{
+					std::cout << m->id_ << " " << action.first << " " << t.first << " "  << t.second << std::endl;
+				}
+			}
+		}
+	}
     std::cout << "Build Transition Matrix" << std::endl;
 
     double max_change = 2.0 * epsilon;
@@ -159,8 +171,8 @@ void ompl::control::SMR::setupSMR(void)
         future_smrtable.clear();
     }
     std::cout << "Finish Value Iteration" << std::endl;
-    //for(auto& state : smrtable)
-    //    std::cout << state.first << " " << state.second[0] << " " << state.second[1] << std::endl;
+    for(auto& state : smrtable)
+        std::cout << state.first << " " << state.second[0] << " " << state.second[1] << std::endl;
 }
 
 double ompl::control::SMR::ps(int id)
@@ -186,7 +198,7 @@ double ompl::control::SMR::ps(int id)
 
 void ompl::control::SMR::setupTransitions(Motion* m)
 {
-    const int stepsize = siC_->getMaxControlDuration() / 2.0;
+    const int stepsize = siC_->getMinControlDuration();
     std::shared_ptr<Motion> newstate(new Motion(siC_, -1));
     for(int i = 0; i < actions; ++i)
     {
@@ -243,6 +255,7 @@ ompl::base::PlannerStatus ompl::control::SMR::solve(const base::PlannerTerminati
     std::unique_ptr<Motion> result(nullptr);
     PathControl *path = new PathControl(si_);
     bool valid = true;
+    const int stepsize = siC_->getMinControlDuration();
     while(!ptc)
     {
         std::shared_ptr<Motion> nearest = nn_->nearest(motion);
@@ -274,8 +287,6 @@ ompl::base::PlannerStatus ompl::control::SMR::solve(const base::PlannerTerminati
         Control* control = siC_->allocControl();
         control->as<DiscreteControlSpace::ControlType>()->value = action;
         result = std::unique_ptr<Motion>(new Motion(siC_, -1));
-
-        const int stepsize = siC_->getMaxControlDuration() / 2;
         int steps = siC_->propagateWhileValid(motion->state, control, stepsize, result->state);
         solved = goal->isSatisfied(motion->state, &approxdif);
         if(steps != stepsize)
