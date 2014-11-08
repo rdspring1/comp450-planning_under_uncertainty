@@ -37,7 +37,7 @@ const double turning_radius = M_PI / 3;
 const double radius = 0.05;
 const double radius_sd [] = {0.01, 0.02};
 const double delta = 0.25;
-const double delta_sd [] = {0.01, 0.02};
+const double delta_sd [] = {0.1, 0.2};
 
 typedef std::pair<double, double> Point2D;
 typedef std::vector<Point2D> Rect;
