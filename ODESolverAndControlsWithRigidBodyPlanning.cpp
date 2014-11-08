@@ -298,7 +298,7 @@ void plan(std::vector<Rect> obstacles, std::vector<double> startV, std::vector<d
 
 void readObstacles(int control, std::vector<Rect>& env, std::vector<double>& start, std::vector<double>& end)
 {
-    std::string filename = "env" + std::to_string(control) + ".txt";
+    std::string filename = "./environments/env" + std::to_string(control) + ".txt";
     std::ifstream fin(filename);
     std::string line;
 

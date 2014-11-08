@@ -41,7 +41,7 @@ def plot(path, obstacles):
     plt.show()
 
 def readEnv(env):
-    filename = "env" + env + ".txt"
+    filename = "./environments/env" + env + ".txt"
     lines = [line.rstrip() for line in open(filename) if len(line.rstrip()) > 0]
     obstacles = []
     polygon = []
