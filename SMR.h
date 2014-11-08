@@ -169,7 +169,7 @@ namespace ompl
                 RNG                                            rng_;
 
                 /** \brief n states in roadmap */
-                int                                            nodes_ = 20000;
+                int                                            nodes_ = 25000;
 
                 /** \brief m samples per transition */
                 int                                            trans_ = 20;
@@ -186,12 +186,13 @@ namespace ompl
 
                 /** \brief SMR DP Lookup Table - State, Action = Success Rate */
                 std::map<int, std::map<int, double>> smrtable;
-                
+
                 std::map<int, std::map<int, double>> future_smrtable;
 
                 std::shared_ptr<Motion> startMotion;
-        };
 
+                std::shared_ptr<Motion> goalMotion;
+        };
     }
 }
 

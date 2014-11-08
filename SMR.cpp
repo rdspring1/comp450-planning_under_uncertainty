@@ -35,16 +35,17 @@
 /* Author: Ioan Sucan */
 
 #include "SMR.h"
-#include "ompl/base/goals/GoalSampleableRegion.h"
-#include "ompl/tools/config/SelfConfig.h"
-#include "ompl/control/spaces/DiscreteControlSpace.h"
-#include <limits>
-#include <math.h>
-#include <assert.h>
 
+#include "ompl/tools/config/SelfConfig.h"
+#include "ompl/base/goals/GoalSampleableRegion.h"
 #include <ompl/base/spaces/SO2StateSpace.h>
 #include <ompl/base/spaces/RealVectorStateSpace.h>
 #include <ompl/base/spaces/DiscreteStateSpace.h>
+#include "ompl/control/spaces/DiscreteControlSpace.h"
+
+#include <limits>
+#include <math.h>
+#include <assert.h>
 ompl::control::SMR::SMR(const SpaceInformationPtr &si) : base::Planner(si, "SMR")
 {
     siC_ = si.get();
@@ -86,7 +87,7 @@ void ompl::control::SMR::setupSMR(void)
             si_->copyState(m->state, st);
             ompl::base::CompoundState* cstate = m->state->as<ompl::base::CompoundState>();
             ompl::base::SO2StateSpace::StateType* so2state = cstate->as<ompl::base::SO2StateSpace::StateType>(1);
-            //so2state->value *= -1;
+            //so2state->value *= orient;
             nn_->add(m); 
             nodeslist.push_back(m);
             //orient += (2*M_PI / orientations);
@@ -121,6 +122,7 @@ void ompl::control::SMR::setupSMR(void)
         nodeslist.push_back(motion);
         nn_->add(motion);
     }
+    goalMotion = nodeslist[nodes_];
 
     for(std::shared_ptr<Motion>& m : nodeslist)
     {
@@ -286,12 +288,42 @@ ompl::base::PlannerStatus ompl::control::SMR::solve(const base::PlannerTerminati
 
     if(result)
         path->append(result->state);
+
     pdef_->addSolutionPath(base::PathPtr(path), !solved, approxdif);
-    return base::PlannerStatus(true, !solved);
+    return base::PlannerStatus(valid, !solved);
 }
 
 void ompl::control::SMR::getPlannerData(base::PlannerData &data) const
 {
     Planner::getPlannerData(data);
-    //TODO Return policy for SMR and start/goal objectives
+    const double stepsize = siC_->getMinControlDuration() * siC_->getPropagationStepSize();
+    // Return state transition graph for SMR and start/goal objectives
+    if(startMotion)
+        ompl::base::PlannerDataVertex(startMotion->state);
+
+    if(goalMotion)
+        ompl::base::PlannerDataVertex(goalMotion->state);
+
+    for(const auto& n : nodeslist)
+    {
+        for(const auto& action : n->t)
+        {
+            Control* control = siC_->allocControl();
+            control->as<DiscreteControlSpace::ControlType>()->value = action.first;
+            for(const auto& t : action.second)
+            {
+                if(data.hasControls())
+                {
+                    data.addEdge(ompl::base::PlannerDataVertex(n->state),
+                                ompl::base::PlannerDataVertex(nodeslist[t.first+1]->state),
+                                ompl::control::PlannerDataEdgeControl(control, stepsize));
+                }
+                else
+                {
+                    data.addEdge(ompl::base::PlannerDataVertex(n->state),
+                                ompl::base::PlannerDataVertex(nodeslist[t.first+1]->state));
+                }
+            }
+        }
+    }
 }
