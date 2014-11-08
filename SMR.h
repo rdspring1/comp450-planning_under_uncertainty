@@ -169,20 +169,20 @@ namespace ompl
                 RNG                                            rng_;
 
                 /** \brief n states in roadmap */
-                int                                            nodes_ = 50000;
+                int                                            nodes_ = 20000;
 
                 /** \brief m samples per transition */
                 int                                            trans_ = 20;
 
                 const double                                   epsilon = 0.0000001;
 
-                const double                                   gamma = 0.00001;
+                const double                                   gamma = 0.001;
 
                 const int                                      actions = 2;
 
                 const int                                      obstacle = 0;
 
-                const double                                   alpha = 2;
+                const double                                   orientations = 1;
 
                 /** \brief SMR DP Lookup Table - State, Action = Success Rate */
                 std::map<int, std::map<int, double>> smrtable;

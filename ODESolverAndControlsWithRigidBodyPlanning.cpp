@@ -30,13 +30,14 @@ const std::string endPolygon = "ep";
 
 const double epsilon = 0.01;
 const double square = 0.025;
+const double alpha = 2.0;
 
 // Car Limits
 const double turning_radius = M_PI / 3;
-const double radius = 0.5;
-const double radius_sd [] = {0.5, 1.0};
-const double delta = 0.5;
-const double delta_sd [] = {0.1, 0.2};
+const double radius = 0.05;
+const double radius_sd [] = {0.01, 0.02};
+const double delta = 0.25;
+const double delta_sd [] = {0.01, 0.02};
 
 typedef std::pair<double, double> Point2D;
 typedef std::vector<Point2D> Rect;
@@ -130,11 +131,8 @@ void KinematicCarODE (const oc::ODESolver::StateType& q, const oc::Control* cont
 // This is a callback method invoked after numerical integration.
 void CarPostIntegration (const ob::State* state, const oc::Control* control, const double duration, ob::State *result)
 {
-    const int u = control->as<oc::DiscreteControlSpace::ControlType>()->value;
     ompl::base::CompoundState* cstate = result->as<ompl::base::CompoundState>();
     ompl::base::SO2StateSpace::StateType* so2state = cstate->as<ompl::base::SO2StateSpace::StateType>(1);
-    ompl::base::DiscreteStateSpace::StateType* dstate = cstate->as<ompl::base::DiscreteStateSpace::StateType>(2);
-    dstate->value = u;
 
     // Normalize orientation between -pi and pi
     ob::SO2StateSpace SO2;
@@ -211,12 +209,12 @@ class CarControlSpace : public oc::DiscreteControlSpace
 void plan(std::vector<Rect> obstacles, std::vector<double> startV, std::vector<double> goalV, int env, bool benchmark = false)
 {
     // x, y, theta, b
-    ompl::base::StateSpacePtr space;
+    ompl::base::StateSpacePtr space(new ompl::base::CompoundStateSpace());
     ompl::base::StateSpacePtr r2(new ompl::base::RealVectorStateSpace(2));
     r2->as<ompl::base::RealVectorStateSpace>()->setBounds(0.0, 1.0);
     ompl::base::StateSpacePtr so2(new ompl::base::SO2StateSpace());
-    ompl::base::StateSpacePtr d(new ompl::base::DiscreteStateSpace(0, 1));
-    space = r2 + so2 + d;
+    space->as<ompl::base::CompoundStateSpace>()->addSubspace(r2, 1.0);
+    space->as<ompl::base::CompoundStateSpace>()->addSubspace(so2, alpha);
 
     // Create a control space
     oc::ControlSpacePtr cspace(new CarControlSpace(space));
@@ -278,7 +276,7 @@ void plan(std::vector<Rect> obstacles, std::vector<double> startV, std::vector<d
         ss.setup();
         planner->as<ompl::control::SMR>()->setupSMR();
 
-        /// attempt to solve the problem within one second of planning time
+        // attempt to solve the problem within one second of planning time
         ob::PlannerStatus solved = ss.solve(20.0);
 
         if (solved)

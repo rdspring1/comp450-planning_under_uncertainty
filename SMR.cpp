@@ -71,27 +71,29 @@ void ompl::control::SMR::setupSMR(void)
 
     for(int i = 0; i < nodes_; ++i)
     {
-        std::shared_ptr<Motion> m(new Motion(siC_, (i+1)));
-        while(!sampler_->sample(m->state))
+        base::State* st = si_->allocState();
+        while(!sampler_->sample(st))
         {
-            si_->freeState(m->state);
-            m->state = si_->allocState();
+            si_->freeState(st);
+            st = si_->allocState();
         }
-        /*
-           const ompl::base::CompoundState* cstate = m->state->as<ompl::base::CompoundState>();
-           const ompl::base::RealVectorStateSpace::StateType* r2state = cstate->as<ompl::base::RealVectorStateSpace::StateType>(0);
-           const ompl::base::SO2StateSpace::StateType* so2state = cstate->as<ompl::base::SO2StateSpace::StateType>(1);
 
-           double x = r2state->values[0];
-           double y = r2state->values[1];
-           double theta = so2state->value;    
-
-           std::cout << x << " " << y << " " << theta << std::endl;
-         */
-        nn_->add(m); 
-        nodeslist.push_back(m);
+        // Sample Cardinal Orientations
+        //double orient = 0;
+        for(int j = 0; j < orientations; ++j)
+        {
+            std::shared_ptr<Motion> m(new Motion(siC_, (i*orientations+1+j)));
+            si_->copyState(m->state, st);
+            ompl::base::CompoundState* cstate = m->state->as<ompl::base::CompoundState>();
+            ompl::base::SO2StateSpace::StateType* so2state = cstate->as<ompl::base::SO2StateSpace::StateType>(1);
+            //so2state->value *= -1;
+            nn_->add(m); 
+            nodeslist.push_back(m);
+            //orient += (2*M_PI / orientations);
+        }
     }
-    std::cout << "Sample States" << std::endl;
+    nodes_ *= orientations;
+    std::cout << "Sample States: " << nodes_ << std::endl;
 
     // Generate Policy using SMR if new start/goal
     base::Goal                   *goal = pdef_->getGoal().get();
@@ -132,19 +134,6 @@ void ompl::control::SMR::setupSMR(void)
         }
     }
     nodes_ = nodeslist.size();
-	for(std::shared_ptr<Motion>& m : nodeslist)
-	{
-		for(auto& action : m->t)
-		{
-			for(auto& t : action.second)
-			{
-				if(ps(t.first) == 1)
-				{
-					std::cout << m->id_ << " " << action.first << " " << t.first << " "  << t.second << std::endl;
-				}
-			}
-		}
-	}
     std::cout << "Build Transition Matrix" << std::endl;
 
     double max_change = 2.0 * epsilon;
@@ -199,22 +188,22 @@ double ompl::control::SMR::ps(int id)
 void ompl::control::SMR::setupTransitions(Motion* m)
 {
     const int stepsize = siC_->getMinControlDuration();
-    std::shared_ptr<Motion> newstate(new Motion(siC_, -1));
     for(int i = 0; i < actions; ++i)
     {
         Control* control = siC_->allocControl();
         control->as<DiscreteControlSpace::ControlType>()->value = i;
-
         for(int j = 0; j < trans_; ++j)
         {
-            int steps = siC_->propagateWhileValid(m->state, control, stepsize, newstate->state);
+            std::shared_ptr<Motion> result(new Motion(siC_, -1));
+            int steps = siC_->propagateWhileValid(m->state, control, stepsize, result->state);
             int nearest = obstacle; 
             if(steps == stepsize)
             { 
-                nearest = nn_->nearest(newstate)->id_;
+                nearest = nn_->nearest(result)->id_;
             }
             m->t[i][nearest] += (1.0/trans_); 
         }
+        siC_->freeControl(control);
     }
 }
 
@@ -270,18 +259,6 @@ ompl::base::PlannerStatus ompl::control::SMR::solve(const base::PlannerTerminati
                 action = value.first;
             }
         }
-
-        /*
-        const ompl::base::CompoundState* cstate = motion->state->as<ompl::base::CompoundState>();
-        const ompl::base::RealVectorStateSpace::StateType* r2state = cstate->as<ompl::base::RealVectorStateSpace::StateType>(0);
-        const ompl::base::SO2StateSpace::StateType* so2state = cstate->as<ompl::base::SO2StateSpace::StateType>(1);
-
-        double x = r2state->values[0];
-        double y = r2state->values[1];
-        double theta = so2state->value;    
-
-        std::cout << motion->id_ << " " << x << " " << y << " " << theta << std::endl;
-        */
 
         // Propagate (CurrentState, Action, Steps, NextState)
         Control* control = siC_->allocControl();
