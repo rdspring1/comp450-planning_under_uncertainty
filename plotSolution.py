@@ -6,7 +6,7 @@ import matplotlib.patches as patches
 import sys
 from math import sin, cos
 
-hside = 0.25
+hside = 0.025
 lineSegs = [[[0, 0], [hside, 0]], [[hside, 0], [hside, hside]], [[hside, hside], [0, hside]], [[0, hside], [0, 0]]]
 
 def plot(path, obstacles):
@@ -37,7 +37,7 @@ def plot(path, obstacles):
                 y.append(v[0] * sin(p[2]) + v[1] * cos(p[2]) + p[1])
             ax.plot(x, y, 'k')
 
-    plt.axis([0,10,0,10])
+    plt.axis([0,1,0,1])
     plt.show()
 
 def readEnv(env):
