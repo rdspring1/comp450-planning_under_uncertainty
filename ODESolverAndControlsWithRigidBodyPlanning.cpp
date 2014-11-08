@@ -242,7 +242,7 @@ void plan(std::vector<Rect> obstacles, std::vector<double> startV, std::vector<d
         goal[i] = goalV[i];
 
     /// set the start and goal states
-    ss.setStartAndGoalStates(start, goal, 0.05);
+    ss.setStartAndGoalStates(start, goal, 0.15);
 
     if(benchmark)
     {

@@ -182,8 +182,6 @@ namespace ompl
 
                 const int                                      obstacle = 0;
 
-                const double                                   orientations = 1;
-
                 /** \brief SMR DP Lookup Table - State, Action = Success Rate */
                 std::map<int, std::map<int, double>> smrtable;
 

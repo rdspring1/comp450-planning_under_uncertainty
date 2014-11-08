@@ -46,6 +46,8 @@
 #include <limits>
 #include <math.h>
 #include <assert.h>
+#include <boost/timer/timer.hpp>
+
 ompl::control::SMR::SMR(const SpaceInformationPtr &si) : base::Planner(si, "SMR")
 {
     siC_ = si.get();
@@ -66,6 +68,9 @@ void ompl::control::SMR::setup(void)
 
 void ompl::control::SMR::setupSMR(void)
 {
+    // Timer - Abstraction Time
+    std::unique_ptr<boost::timer::auto_cpu_timer> abstraction_time(new boost::timer::auto_cpu_timer());
+
     //Create SMR
     if(!sampler_)
         sampler_ = si_->allocValidStateSampler(); 
@@ -79,21 +84,11 @@ void ompl::control::SMR::setupSMR(void)
             st = si_->allocState();
         }
 
-        // Sample Cardinal Orientations
-        //double orient = 0;
-        for(int j = 0; j < orientations; ++j)
-        {
-            std::shared_ptr<Motion> m(new Motion(siC_, (i*orientations+1+j)));
-            si_->copyState(m->state, st);
-            ompl::base::CompoundState* cstate = m->state->as<ompl::base::CompoundState>();
-            ompl::base::SO2StateSpace::StateType* so2state = cstate->as<ompl::base::SO2StateSpace::StateType>(1);
-            //so2state->value *= orient;
-            nn_->add(m); 
-            nodeslist.push_back(m);
-            //orient += (2*M_PI / orientations);
-        }
+        std::shared_ptr<Motion> m(new Motion(siC_, (i+1)));
+        si_->copyState(m->state, st);
+        nn_->add(m);
+        nodeslist.push_back(m);
     }
-    nodes_ *= orientations;
     std::cout << "Sample States: " << nodes_ << std::endl;
 
     // Generate Policy using SMR if new start/goal
@@ -137,6 +132,10 @@ void ompl::control::SMR::setupSMR(void)
     }
     nodes_ = nodeslist.size();
     std::cout << "Build Transition Matrix" << std::endl;
+    abstraction_time.reset(nullptr);
+
+    // Timer - Policy Time
+    std::unique_ptr<boost::timer::auto_cpu_timer> policy_time(new boost::timer::auto_cpu_timer());
 
     double max_change = 2.0 * epsilon;
     for(int i = 0; i < nodes_ && max_change > epsilon; ++i)
@@ -162,8 +161,10 @@ void ompl::control::SMR::setupSMR(void)
         future_smrtable.clear();
     }
     std::cout << "Finish Value Iteration" << std::endl;
-    for(auto& state : smrtable)
-        std::cout << state.first << " " << state.second[0] << " " << state.second[1] << std::endl;
+    policy_time.reset(nullptr);
+    std::cout << "Start Success Rate: " << smrtable[startMotion->id_][0] << " " << smrtable[startMotion->id_][1] << std::endl;
+    //for(auto& state : smrtable)
+    //    std::cout << state.first << " " << state.second[0] << " " << state.second[1] << std::endl;
 }
 
 double ompl::control::SMR::ps(int id)
@@ -312,16 +313,19 @@ void ompl::control::SMR::getPlannerData(base::PlannerData &data) const
             control->as<DiscreteControlSpace::ControlType>()->value = action.first;
             for(const auto& t : action.second)
             {
-                if(data.hasControls())
+                if(t.first > 0)
                 {
-                    data.addEdge(ompl::base::PlannerDataVertex(n->state),
-                                ompl::base::PlannerDataVertex(nodeslist[t.first+1]->state),
+                    if(data.hasControls())
+                    {
+                        data.addEdge(ompl::base::PlannerDataVertex(n->state),
+                                ompl::base::PlannerDataVertex(nodeslist[t.first-1]->state),
                                 ompl::control::PlannerDataEdgeControl(control, stepsize));
-                }
-                else
-                {
-                    data.addEdge(ompl::base::PlannerDataVertex(n->state),
-                                ompl::base::PlannerDataVertex(nodeslist[t.first+1]->state));
+                    }
+                    else
+                    {
+                        data.addEdge(ompl::base::PlannerDataVertex(n->state),
+                                ompl::base::PlannerDataVertex(nodeslist[t.first-1]->state));
+                    }
                 }
             }
         }
