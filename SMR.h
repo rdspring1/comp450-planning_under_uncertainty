@@ -135,8 +135,14 @@ namespace ompl
                         bool goal;
                 };
 
+                /** \brief Multi-Threaded Version - Setup Transition Probabilities */
+                void setupTransitions(int start, int end);
+
                 /** \brief Setup Transition Probabilities */
-                void setupTransitions(Motion* m);
+                void setupTransition(Motion* m);
+
+                /** \brief Value Iteration */
+                void valueIteration(double& max_change, int start, int end);
 
                 /** \brief Probability of Success for state i */
                 double ps(int id);
@@ -151,45 +157,58 @@ namespace ompl
                 }
 
                 /** \brief Valid State sampler */
-                base::ValidStateSamplerPtr                          sampler_;
+                base::ValidStateSamplerPtr                                      sampler_;
 
                 /** \brief Control sampler */
-                DirectedControlSamplerPtr                      controlSampler_;
+                DirectedControlSamplerPtr                                       controlSampler_;
 
                 /** \brief The base::SpaceInformation cast as control::SpaceInformation, for convenience */
-                const SpaceInformation                        *siC_;
+                const SpaceInformation                                          *siC_;
 
                 /** \brief A nearest-neighbors datastructure containing the tree of motions */
-                boost::shared_ptr< NearestNeighbors<std::shared_ptr<Motion>> > nn_;
+                boost::shared_ptr< NearestNeighbors<std::shared_ptr<Motion>> >  nn_;
 
                 /** \brief List of Nodes */
-                std::vector<std::shared_ptr<Motion>>			       nodeslist;
+                std::vector<std::shared_ptr<Motion>>			                nodeslist;
 
                 /** \brief The random number generator */
-                RNG                                            rng_;
+                RNG                                                             rng_;
 
                 /** \brief n states in roadmap */
-                int                                            nodes_ = 50000;
+                int                                                             nodes_ = 50000;
 
                 /** \brief m samples per transition */
-                int                                            trans_ = 20;
+                int                                                             trans_ = 20;
 
-                const double                                   epsilon = 0.0000001;
+                /** \brief epsilon - amount of change required for value iteration to continue */
+                const double                                                    epsilon = 0.0000001;
 
-                const double                                   gamma = 0.001;
+                /** \brief gamma - discount reward to prevent cyclical actions*/
+                const double                                                    gamma = 0.001;
 
-                const int                                      actions = 2;
+                /** \brief the number of discrete actions */
+                const int                                                       actions = 2;
 
-                const int                                      obstacle = 0;
+                /** \brief motion id for the obstacle state */
+                const int                                                       obstacle = 0;
+
+                /** \brief number of transitions */
+                const int                                                       threads = 6;
+
+                /** \brief the maximum change for thread during value iteration */
+                std::vector<double>                                             changes;
 
                 /** \brief SMR DP Lookup Table - State, Action = Success Rate */
-                std::map<int, std::map<int, double>> smrtable;
+                std::vector<std::map<int, double>>                              smrtable;
 
-                std::map<int, std::map<int, double>> future_smrtable;
+                /** \brief SMR DP Lookup Table for the next timestep */
+                std::vector<std::map<int, double>>                              future_smrtable;
 
-                std::shared_ptr<Motion> startMotion;
+                /** \brief start state motion */
+                std::shared_ptr<Motion>                                         startMotion;
 
-                std::shared_ptr<Motion> goalMotion;
+                /** \brief goal state motion */
+                std::shared_ptr<Motion>                                         goalMotion;
         };
     }
 }

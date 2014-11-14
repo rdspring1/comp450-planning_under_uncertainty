@@ -43,6 +43,7 @@
 #include <ompl/base/spaces/DiscreteStateSpace.h>
 #include "ompl/control/spaces/DiscreteControlSpace.h"
 
+#include <thread>
 #include <limits>
 #include <math.h>
 #include <assert.h>
@@ -89,7 +90,6 @@ void ompl::control::SMR::setupSMR(void)
         nn_->add(m);
         nodeslist.push_back(m);
     }
-    std::cout << "Sample States: " << nodes_ << std::endl;
 
     // Generate Policy using SMR if new start/goal
     base::Goal                   *goal = pdef_->getGoal().get();
@@ -118,19 +118,28 @@ void ompl::control::SMR::setupSMR(void)
         nn_->add(motion);
     }
     goalMotion = nodeslist[nodes_];
+    nodes_ = nodeslist.size();
+    std::cout << "Sample States: " << nodes_ << std::endl;
 
-    for(std::shared_ptr<Motion>& m : nodeslist)
+    const int tsize = nodes_ / threads;
+    const int remainder = nodes_ % threads;
     {
-        if(!goal->isSatisfied(m->state))
+        std::vector<std::thread> threadlist;
+        for(int i = 0; i < threads-1; ++i)
         {
-            setupTransitions(m.get());
+            int startPosition = i * tsize;
+            int endPosition = startPosition + tsize;
+            threadlist.push_back(std::thread(&ompl::control::SMR::setupTransitions, this, startPosition, endPosition));
         }
-        else
+        int lastStartPosition = (threads-1) * tsize;
+        int lastEndPosition = lastStartPosition + tsize + remainder;
+        threadlist.push_back(std::thread(&ompl::control::SMR::setupTransitions, this, lastStartPosition, lastEndPosition));
+
+        for(auto& t : threadlist)
         {
-            m->goal = true;
+            t.join();
         }
     }
-    nodes_ = nodeslist.size();
     std::cout << "Build Transition Matrix" << std::endl;
     abstraction_time.reset(nullptr);
 
@@ -138,27 +147,38 @@ void ompl::control::SMR::setupSMR(void)
     std::unique_ptr<boost::timer::auto_cpu_timer> policy_time(new boost::timer::auto_cpu_timer());
 
     double max_change = 2.0 * epsilon;
+    smrtable.resize(nodes_);
+    future_smrtable.resize(nodes_);
     for(int i = 0; i < nodes_ && max_change > epsilon; ++i)
     {
-        max_change = epsilon;
-        for(int j = 0; j < nodes_; ++j)
+        changes.clear();
+        changes.resize(threads, epsilon);
+        std::vector<std::thread> threadlist;
+        for(int i = 0; i < threads-1; ++i)
         {
-            int id = nodeslist[j]->id_;
-            for(auto& action : nodeslist[j]->t)
-            {
-                double newsuccess = 0;
-                for(auto& nextstate : action.second)
-                {
-                    newsuccess += (nextstate.second * (-gamma + ps(nextstate.first)));
-                }
-                double change = std::abs(smrtable[id][action.first] - newsuccess);
-                max_change = std::max(max_change, change);
-                future_smrtable[id][action.first] = newsuccess;
-            }
+            int startPosition = i * tsize;
+            int endPosition = startPosition + tsize;
+            threadlist.push_back(std::thread(&ompl::control::SMR::valueIteration, this, std::ref(changes[i]), startPosition, endPosition));
         }
+        int lastStartPosition = (threads-1) * tsize;
+        int lastEndPosition = lastStartPosition + tsize + remainder;
+        threadlist.push_back(std::thread(&ompl::control::SMR::valueIteration, this, std::ref(changes[threads-1]), lastStartPosition, lastEndPosition));
+
+        for(auto& t : threadlist)
+        {
+            t.join();
+        }
+
+        max_change = epsilon;
+        for(auto& c : changes)
+        {
+            max_change = std::max(max_change, c);            
+        }
+
         //std::cout << i << " " << max_change << std::endl;
         smrtable.swap(future_smrtable);
         future_smrtable.clear();
+        future_smrtable.resize(nodes_);
     }
     std::cout << "Finish Value Iteration" << std::endl;
     policy_time.reset(nullptr);
@@ -188,7 +208,43 @@ double ompl::control::SMR::ps(int id)
     }
 }
 
-void ompl::control::SMR::setupTransitions(Motion* m)
+void ompl::control::SMR::valueIteration(double& max_change, int start, int end)
+{
+    for(int j = start; j < end; ++j)
+    {
+        int id = nodeslist[j]->id_;
+        for(const auto& action : nodeslist[j]->t)
+        {
+            double newsuccess = 0;
+            for(const auto& nextstate : action.second)
+            {
+                newsuccess += (nextstate.second * (-gamma + ps(nextstate.first)));
+            }
+            double change = std::abs(smrtable[id][action.first] - newsuccess);
+            max_change = std::max(max_change, change);
+            future_smrtable[id][action.first] = newsuccess;
+        }
+    }
+}
+
+void ompl::control::SMR::setupTransitions(int start, int end)
+{
+    base::Goal                   *goal = pdef_->getGoal().get();
+    for(int n = start; n < end; ++n)
+    {
+        std::shared_ptr<Motion>& m = nodeslist[n];
+        if(!goal->isSatisfied(m->state))
+        {
+            setupTransition(m.get());
+        }
+        else
+        {
+            m->goal = true;
+        }
+    } 
+}
+
+void ompl::control::SMR::setupTransition(Motion* m)
 {
     const int stepsize = siC_->getMinControlDuration();
     for(int i = 0; i < actions; ++i)
