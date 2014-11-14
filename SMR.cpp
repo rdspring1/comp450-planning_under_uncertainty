@@ -310,12 +310,15 @@ ompl::base::PlannerStatus ompl::control::SMR::solve(const base::PlannerTerminati
         // Select Action based on Current State
         int action = 0;
         double max_value = 0;
-        for(auto& value : smrtable[nearest->id_])
+        if(nearest->id_ < smrtable.size())
         {
-            if(value.second > max_value)
+            for(auto& value : smrtable[nearest->id_])
             {
-                max_value = value.second;
-                action = value.first;
+                if(value.second > max_value)
+                {
+                    max_value = value.second;
+                    action = value.first;
+                }
             }
         }
 
