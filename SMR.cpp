@@ -184,7 +184,7 @@ void ompl::control::SMR::setupSMR(void)
     policy_time.reset(nullptr);
     std::cout << "Start Success Rate: " << smrtable[startMotion->id_][0] << " " << smrtable[startMotion->id_][1] << std::endl;
     //for(auto& state : smrtable)
-    //    std::cout << state.first << " " << state.second[0] << " " << state.second[1] << std::endl;
+    //    std::cout << state[0] << " " << state[1] << std::endl;
 }
 
 double ompl::control::SMR::ps(int id)
