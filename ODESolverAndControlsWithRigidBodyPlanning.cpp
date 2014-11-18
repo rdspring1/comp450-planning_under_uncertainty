@@ -13,6 +13,7 @@
 
 // C++ library
 #include <iostream>
+#include <string>
 #include <valarray>
 #include <limits>
 #include <fstream>
@@ -28,6 +29,7 @@ const std::string startStr = "start";
 const std::string endStr = "end";
 const std::string endPolygon = "ep";
 
+const int default_size = 50000;
 const double epsilon = 0.01;
 const double square = 0.025;
 const double alpha = 2.0;
@@ -35,7 +37,7 @@ const double alpha = 2.0;
 // Car Limits
 const double turning_radius = M_PI / 3;
 const double radius = 0.05;
-const double radius_sd [] = {0.01, 0.02};
+double radius_sd [] = {0.01, 0.02};
 const double delta = 0.25;
 const double delta_sd [] = {0.1, 0.2};
 
@@ -206,7 +208,7 @@ class CarControlSpace : public oc::DiscreteControlSpace
 };
 /// @endcond
 
-void plan(std::vector<Rect> obstacles, std::vector<double> startV, std::vector<double> goalV, int env, bool benchmark = false)
+void plan(std::vector<Rect> obstacles, std::vector<double> startV, std::vector<double> goalV, int env, bool benchmark = false, std::string title = "benchmark", int N = default_size)
 {
     // x, y, theta, b
     ompl::base::StateSpacePtr space(new ompl::base::CompoundStateSpace());
@@ -247,12 +249,12 @@ void plan(std::vector<Rect> obstacles, std::vector<double> startV, std::vector<d
     if(benchmark)
     {
         // Benchmark Code - Project 5
-        std::string title = "benchmark";
         ompl::tools::Benchmark b(ss, title);
         //b.addPlanner(ompl::base::PlannerPtr(new ompl::control::RRT(ss.getSpaceInformation())));
         ompl::base::PlannerPtr planner(new ompl::control::SMR(ss.getSpaceInformation()));
         ss.setPlanner(planner);
         ss.setup();
+        planner->as<ompl::control::SMR>()->setNodes(N);
         planner->as<ompl::control::SMR>()->setupSMR();
         b.addPlanner(ompl::base::PlannerPtr(planner));
 
@@ -337,14 +339,16 @@ void readObstacles(int control, std::vector<Rect>& env, std::vector<double>& sta
 int main(int, char **)
 {
     std::cout << "OMPL version: " << OMPL_VERSION << std::endl;
-    bool choice;
+    int choice;
     std::cout << "Plan for: "<< std::endl;
     std::cout << " (0) Single Run" << std::endl;
     std::cout << " (1) Benchmark SMR Planner" << std::endl;
+    std::cout << " (2) Gaussian Noise Experiment" << std::endl;
+    std::cout << " (3) Nodes Experiment" << std::endl;
     std::cin >> choice;
 
     int env;
-    std::cout << "Environment ID: "<< std::endl;
+    std::cout << "Environment ID: " << std::endl;
     std::cin >> env;
 
     std::vector<Rect> obstacle;
@@ -352,13 +356,43 @@ int main(int, char **)
     std::vector<double> goal;
     readObstacles(env, obstacle, start, goal);
 
-    if(choice)
+    switch(choice)
     {
-        plan(obstacle, start, goal, env, true);
-    }
-    else
-    {
-        plan(obstacle, start, goal, env);
+        case 0: // Default Run - Print path if successful
+            {
+                plan(obstacle, start, goal, env);
+            }
+            break;
+        case 1: // Default Benchmark - Run for 100 iterations
+            {
+                plan(obstacle, start, goal, env, true);
+            }
+            break;
+        case 2: // Gaussian Noise Standard Deviation Experiment
+            {
+                const double max_noise = 0.05;
+                const double noise_step_size = 0.01;
+                for(double n = 0; n <= max_noise; n+=noise_step_size)
+                {
+                    radius_sd[0] = n;
+                    radius_sd[1] = 2 * n;
+                    std::string title = "benchmark_sd" + std::to_string(n);
+                    std::cout << title << std::endl;
+                    plan(obstacle, start, goal, env, true, title);
+                }
+            }
+            break;
+        case 3: // SMR Nodes Experiment
+            {
+                const int step_size = 10000;
+                for(int n = step_size; n <= default_size; n+=step_size)
+                {
+                    std::string title = "benchmark_nodes" + std::to_string(n);
+                    std::cout << title << std::endl;
+                    plan(obstacle, start, goal, env, true, title, n);
+                }
+            }
+            break;
     }
 
     return 0;
